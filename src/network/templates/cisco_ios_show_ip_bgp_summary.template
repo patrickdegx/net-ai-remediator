@@ -1,0 +1,12 @@
+Value Required NEIGHBOR ([0-9a-fA-F\.:]+)
+Value V (\d+)
+Value AS (\d+)
+Value MSGRCV (([0-9]+|-))
+Value MSGSND (([0-9]+|-))
+Value TQ (([0-9]+|-))
+Value INQ (([0-9]+|-))
+Value UPDQ (([0-9]+|-))
+Value STATE_PFXRCV ([a-zA-Z0-9]+)
+
+Start
+  ^${NEIGHBOR}\s+${V}\s+${AS}\s+${MSGRCV}\s+${MSGSND}\s+${TQ}\s+${INQ}\s+${UPDQ}\s+${STATE_PFXRCV} -> Record

@@ -1,0 +1,12 @@
+Value NEIGHBOR ([0-9.]+)
+Value V (\d+)
+Value AS (\d+)
+Value MSGRCV (\d+)
+Value MSGSND (\d+)
+Value TQ (\d+)
+Value INQ (\d+)
+Value UPDQ (\d+)
+Value STATE_PFXRCV (\d+)
+
+Start
+  ^${NEIGHBOR}\s+${V}\s+${AS}\s+${MSGRCV}\s+${MSGSND}\s+${TQ}\s+${INQ}\s+${UPDQ}\s+${STATE_PFXRCV}\s*$$ -> Record

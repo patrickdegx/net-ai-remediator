@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  localstack:
+    container_name: devops_aws_sim
+    image: localstack/localstack:3.8.1
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      - SERVICES=s3,dynamodb,sns,sqs,secretsmanager
+      - AWS_DEFAULT_REGION=us-east-1
+      - DEBUG=1
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - net-ai-net
+
+  net-ai-app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: net_ai_remediator_app
+    volumes:
+      - ..:/app
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - LOCALSTACK_HOST=localstack
+    depends_on:
+      - localstack
+    networks:
+      - net-ai-net
+    command: python tests/teste_parser2.py
+
+networks:
+  net-ai-net:
+    driver: bridge
