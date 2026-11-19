@@ -10,7 +10,7 @@ except ImportError:
     NETMIKO_DISPONIVEL = False
 
 logger = logging.getLogger("NetworkDriver")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
+
 
 
 class NetworkDriverInterface(ABC):
@@ -61,29 +61,38 @@ class NetmikoRouterDriver(NetworkDriverInterface):
         logger.info(f"Driver Netmiko resiliente configurado para o host: {self.ip} (Max retries: {max_retries})")
 
     def _executar_com_retry(self, func, *args, **kwargs):
-        """
-        Método utilitário para aplicar lógica de retry com intervalo progressivo (backoff).
-        """
+        """Executa uma operação com novas tentativas e intervalo crescente (backoff)."""
         tentativa = 0
+        delay_atual = self.retry_delay
         while tentativa < self.max_retries:
             tentativa += 1
             try:
                 return func(*args, **kwargs)
             except NetmikoTimeoutException as e:
-                logger.warning(f"[TENTATIVA {tentativa}/{self.max_retries}] Timeout ao conectar em {self.ip}. Tentando novamente em {self.retry_delay}s...")
+                logger.warning(
+                    f"[TENTATIVA {tentativa}/{self.max_retries}] Timeout em {self.ip}. "
+                    f"Tentando novamente em {delay_atual}s..."
+                )
                 if tentativa == self.max_retries:
-                    logger.error(f"[FALHA CRÍTICA] Esgotadas todas as {self.max_retries} tentativas de conexão com {self.ip} devido a Timeout.")
+                    logger.error(
+                        f"[FALHA CRÍTICA] Esgotadas {self.max_retries} tentativas em {self.ip}."
+                    )
                     raise ConnectionError(f"Timeout persistente com o roteador {self.ip}") from e
-                time.sleep(self.retry_delay)
-                self.retry_delay *= 2  # Backoff exponencial simples
+                time.sleep(delay_atual)
+                delay_atual *= 2
             except NetmikoAuthenticationException:
-                logger.error(f"[ERRO DE SEGURANÇA] Falha de autenticação SSH em {self.ip}. Tentativas canceladas.")
+                logger.error(
+                    f"[ERRO DE SEGURANÇA] Falha de autenticação SSH em {self.ip}. "
+                    "Tentativas canceladas."
+                )
                 raise PermissionError(f"Falha de autenticação no roteador {self.ip}")
             except Exception as e:
-                logger.error(f"[ERRO INESPERADO] Falha na tentativa {tentativa} com {self.ip}: {str(e)}")
+                logger.error(
+                    f"[ERRO INESPERADO] Falha na tentativa {tentativa} com {self.ip}: {str(e)}"
+                )
                 if tentativa == self.max_retries:
                     raise
-                time.sleep(self.retry_delay)
+                time.sleep(delay_atual)
 
     def coletar_logs_recentes(self) -> str:
         def _acao():

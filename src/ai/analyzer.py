@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 import requests
 
 logger = logging.getLogger("AIAnalyzer")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
+
 
 
 class NetworkAIAnalyzer:
