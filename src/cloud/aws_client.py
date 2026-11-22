@@ -7,12 +7,6 @@ import json
 import secrets
 import string
 
-# Configuração profissional de logs (data, nível e mensagem)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
 logger = logging.getLogger("AWSManager")
 
 

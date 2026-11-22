@@ -93,6 +93,7 @@ class NetmikoRouterDriver(NetworkDriverInterface):
                 if tentativa == self.max_retries:
                     raise
                 time.sleep(delay_atual)
+                delay_atual *= 2
 
     def coletar_logs_recentes(self) -> str:
         def _acao():

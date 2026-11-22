@@ -217,3 +217,19 @@ Hoje focamos na robustez, segurança e inteligência do motor de IA (`AIAnalyzer
 * **[Pilar 2] Resiliência e Tratamento de Erros:** Mecanismos de *retry*, timeout e blindagem contra falhas de conexão de rede.
 * **[Pilar 3] Parsing Inteligente de CLI (TextFSM):** Conversão de saídas brutas de texto de roteadores em JSON estruturado para consumo otimizado da IA.
 * **[Pilar 4] Sistema de Gatilhos de Eventos (Syslog/Webhooks):** Captura automatizada de logs em tempo real para disparar o pipeline de remediação de ponta a ponta.
+
+
+
+
+## Atualização 22/11/2026
+
+
+# Contexto do Projeto: Net-AI Remediator
+**Data da Última Atualização:** 22 de Novembro de 2026
+**Status do Projeto:** Pipeline Principal Integrado com LocalStack, Ollama (`llama3`) e Sincronização de Estado no DynamoDB
+
+## 1. Entregas Consolidadas
+* **Configuração Centralizada (`src/core/config.py`):** Criação de `AppConfig` (`@dataclass(frozen=True)`) com leitura via `os.getenv` para LocalStack, região AWS, nomes de bucket/tabela/fila/tópico e parâmetros do Ollama.
+* **Padronização de Logging (`src/cloud/aws_client.py`):** Remoção do `logging.basicConfig(...)` do módulo para que o ponto de entrada (`main.py`) controle a configuração global de logs.
+* **Orquestração Ponta a Ponta (`main.py`):** Integração de `NetworkDriverFactory`, `IncidenteRede`, `DiagnosticoIA`, `NetworkAIAnalyzer` e `AWSManager` (S3, DynamoDB, SQS, SNS), com log explícito quando o SNS não é acionado para severidades fora de `ALTA`/`CRITICA`.
+* **Sincronização de Estado Pós-Remediação:** Atualização do status do incidente no DynamoDB para `REMEDIADO` após `driver.aplicar_remediacao(...)` retornar `True`.

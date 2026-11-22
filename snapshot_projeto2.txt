@@ -1,0 +1,1599 @@
+﻿
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\docs\CONTEXT.md ===
+# Contexto do Projeto: Net-AI Remediator (PortfÃ³lio DevOps & Redes)
+
+## 1. Objetivo do Projeto
+Desenvolver uma ferramenta autÃ´noma de monitoramento, diagnÃ³stico e remediaÃ§Ã£o de rede e nuvem para portfÃ³lio profissional focado em vagas de **DevOps / Engenharia de Redes**. O projeto demonstra domÃ­nio de infraestrutura hÃ­brida (On-Premises + Cloud), automaÃ§Ã£o em Python com ProgramaÃ§Ã£o Orientada a Objetos (POO) e anÃ¡lise inteligente de logs utilizando InteligÃªncia Artificial local.
+
+## 2. Arquitetura HÃ­brida (On-Premises + Cloud + IA)
+- **Camada On-Premises / Rede:** Roteadores simulados via containers Linux (**FRRouting / FRR**) e integraÃ§Ã£o futura via rede *Bridge/Host-Only* com mÃ¡quinas virtuais reais no **VMware / EVE-NG** (ex: **MikroTik RouterOS**).
+- **Camada Cloud (AWS Simulada):** Uso do **Docker** + **LocalStack** para emular serviÃ§os da AWS localmente (S3, EC2, IAM, CloudWatch Logs) sem custos financeiros.
+- **Camada de InteligÃªncia & RemediaÃ§Ã£o (IA Local):** ExecuÃ§Ã£o de LLMs localmente via **Ollama** para ler logs de rede/sistema, diagnosticar falhas e sugerir comandos de correÃ§Ã£o.
+
+## 3. PadrÃµes de Engenharia e Estrutura de Pastas
+- **Linguagem:** Python 3 (modularizado e orientado a objetos).
+- **Design Patterns:**
+  * **Factory Pattern (`src/network`):** Instancia drivers de conexÃ£o (SSH/API) dinamicamente por fabricante (FRR, MikroTik, etc.).
+  * **Strategy Pattern (`src/ai`):** Permite alternar o motor de IA (Ollama local, APIs externas, etc.) sem alterar o restante do cÃ³digo.
+- **Ãrvore de DiretÃ³rios Criada (`~/net-ai-remediator`):**
+  ```text
+  net-ai-remediator/
+  â”œâ”€â”€ docs/               # DocumentaÃ§Ã£o e CONTEXT.md (Save Game do projeto)
+  â”œâ”€â”€ infra/              # Arquivos de infraestrutura (docker-compose.yml)
+  â”œâ”€â”€ logs/               # Armazenamento local de logs para testes
+  â”œâ”€â”€ src/                # CÃ³digo-fonte principal (pacotes Python com __init__.py)
+  â”‚   â”œâ”€â”€ ai/             # analyzer.py (IntegraÃ§Ã£o com IA)
+  â”‚   â”œâ”€â”€ cloud/          # aws_client.py (IntegraÃ§Ã£o AWS / LocalStack)
+  â”‚   â”œâ”€â”€ core/           # config.py (ConfiguraÃ§Ãµes globais)
+  â”‚   â””â”€â”€ network/        # drivers.py (ConexÃµes SSH e parsers)
+  â”œâ”€â”€ tests/              # Testes unitÃ¡rios e de integraÃ§Ã£o
+  â”‚   â”œâ”€â”€ teste_aws_16_11_26.py  # Testes de integraÃ§Ã£o S3 (bÃ¡sico e avanÃ§ado)
+  â”‚   â”œâ”€â”€ teste_dynamodb.py      # Testes de integraÃ§Ã£o DynamoDB
+  â”‚   â”œâ”€â”€ teste_secrets.py       # Testes de integraÃ§Ã£o Secrets Manager
+  â”‚   â”œâ”€â”€ teste_sqs.py           # Testes de integraÃ§Ã£o SQS
+  â”‚   â””â”€â”€ teste_sns.py           # Testes de integraÃ§Ã£o SNS
+  â”œâ”€â”€ main.py             # Ponto de entrada da aplicaÃ§Ã£o
+  â”œâ”€â”€ requirements.txt    # DependÃªncias Python
+  â””â”€â”€ README.md           # ApresentaÃ§Ã£o do projeto no GitHub
+
+
+  Contexto do Projeto: Net-AI Remediator
+Data da AtualizaÃ§Ã£o: 16/11/2026
+Status Atual: Camada Cloud AWS (S3, DynamoDB, Secrets Manager, SQS e SNS) 100% finalizada e validada localmente via LocalStack.
+
+1. Infraestrutura & Docker (infra/docker-compose.yml)
+LocalizaÃ§Ã£o do Arquivo: infra/docker-compose.yml (execuÃ§Ã£o via docker-compose -f infra/docker-compose.yml up -d).
+
+Imagem Utilizada: localstack/localstack:3.8.1 (versÃ£o Community estÃ¡vel).
+
+Nota TÃ©cnica: Evitar a tag :latest, pois versÃµes mais recentes exigem autenticaÃ§Ã£o/licenÃ§a Pro (LOCALSTACK_AUTH_TOKEN, retornando exit code 55).
+
+Mapeamento de Rede: Porta configurada explicitamente como 127.0.0.1:4566:4566 para evitar bloqueios de firewall/rede no Windows.
+
+ServiÃ§os Ativos: Inicialmente s3 e posteriormente expandido para s3,dynamodb,sns,sqs,secretsmanager na regiÃ£o padrÃ£o us-east-1 (container devops_aws_sim).
+
+2. MÃ³dulo Cloud (src/cloud/aws_client.py)
+A classe AWSManager foi implementada com suporte completo ao ciclo de vida de objetos no S3:
+
+ConfiguraÃ§Ã£o de Cliente: Uso de botocore.config.Config com s3={'addressing_style': 'path'} para garantir compatibilidade de resoluÃ§Ã£o de URLs locais no Windows (http://localhost:4566/<bucket>).
+
+MÃ©todos Implementados (Etapa 1 - Base S3):
+
+criar_bucket(bucket_name): Cria buckets S3.
+
+listar_buckets(): Lista todos os buckets disponÃ­veis na conta/simulador.
+
+enviar_arquivo(file_name, bucket_name, object_name): Faz upload de arquivos locais para o S3.
+
+baixar_arquivo(bucket_name, object_name, file_name): Realiza o download de objetos do S3 para o sistema local.
+
+deletar_arquivo(bucket_name, object_name): Remove objetos especÃ­ficos de dentro do bucket (limpeza de logs/temporÃ¡rios).
+
+gerar_url_presassinada(bucket_name, object_name, expiration=3600): Gera links temporÃ¡rios e assinados criptograficamente para acesso seguro e controlado a objetos privados sem expor credenciais.
+
+3. ValidaÃ§Ã£o & Conceitos Estudados (tests/teste_aws_16_11_26.py)
+Fluxo de Teste Integrado: Script executado com sucesso validando ponta a ponta: criaÃ§Ã£o do bucket net-ai-bucket-teste-2026, listagem, upload de logs/teste_log.txt, download, geraÃ§Ã£o de URL prÃ©-assinada e deleÃ§Ã£o final do objeto.
+
+ValidaÃ§Ã£o de Comportamento S3 (XML NoSuchKey): Ao abrir a URL prÃ©-assinada no navegador apÃ³s a execuÃ§Ã£o completa do script de teste, o LocalStack retornou o XML padrÃ£o da AWS <Code>NoSuchKey</Code>. Isso comprovou na prÃ¡tica que:
+
+A assinatura digital da URL prÃ©-assinada (AWSAccessKeyId + Signature + Expires) foi validada corretamente pelo servidor.
+
+O mÃ©todo deletar_arquivo havia removido o objeto com sucesso logo antes da requisiÃ§Ã£o.
+
+Formas de InspeÃ§Ã£o do LocalStack:
+
+Via AWS CLI: aws --endpoint-url=http://localhost:4566 s3 ls
+
+Via Healthcheck HTTP: http://localhost:4566/_localstack/health
+
+Via cÃ³digo Python (s3_client.list_objects_v2).
+
+4. AtualizaÃ§Ãµes Finais (SessÃ£o Noturna - 16/11/2026)
+AcrÃ©scimos realizados no AWSManager (src/cloud/aws_client.py) e na infraestrutura para elevar o mÃ³dulo ao padrÃ£o de produÃ§Ã£o:
+
+4.1. Engenharia de Software e ExpansÃ£o LocalStack
+RefatoraÃ§Ã£o Estrutural: SubstituiÃ§Ã£o de print() pelo mÃ³dulo nativo logging (formato com timestamp e nÃ­veis [INFO]/[ERROR]), adiÃ§Ã£o de Type Hints em todos os mÃ©todos e tratamento especÃ­fico de botocore.exceptions.ClientError.
+
+ExpansÃ£o de ServiÃ§os (infra/docker-compose.yml): VariÃ¡vel SERVICES atualizada para s3,dynamodb,sns,sqs,secretsmanager, mantendo retries={'max_attempts': 3, 'mode': 'standard'} no Config.
+
+4.2. EvoluÃ§Ãµes AvanÃ§adas no S3 (self.s3_client)
+Suporte a Metadados no Upload FÃ­sico: enviar_arquivo atualizado para aceitar o parÃ¢metro opcional metadata: Optional[Dict[str, str]] = None via ExtraArgs.
+
+Novos MÃ©todos Implementados:
+7. enviar_conteudo_texto(conteudo, bucket_name, object_name, metadata=None, content_type="text/plain; charset=utf-8"): Grava strings (logs brutos, JSONs, relatÃ³rios da IA) direto da memÃ³ria RAM via put_object, evitando arquivos temporÃ¡rios em disco.
+8. ler_conteudo_texto(bucket_name, object_name): LÃª e decodifica objetos do S3 direto para a memÃ³ria RAM via get_object.
+9. listar_arquivos(bucket_name, prefixo=""): Listagem filtrada por prefixo (list_objects_v2), separando caminhos lÃ³gicos (relatorios/ vs logs/).
+10. arquivo_existe(bucket_name, object_name): Checagem leve via requisiÃ§Ã£o HEAD (head_object), capturando erros 404/NoSuchKey.
+11. obter_metadados(bucket_name, object_name): LÃª metadados imutÃ¡veis gravados no cabeÃ§alho do objeto.
+12. definir_tags(bucket_name, object_name, tags): Aplica/atualiza tags dinÃ¢micas (put_object_tagging) para rastreamento e ciclo de vida.
+13. obter_tags(bucket_name, object_name): Recupera tags associadas ao objeto (get_object_tagging).
+
+4.3. MÃ³dulo DynamoDB (self.dynamodb_client & tests/teste_dynamodb.py)
+ImplementaÃ§Ã£o do banco NoSQL para indexar o histÃ³rico estruturado dos incidentes de rede e vincular cada ocorrÃªncia ao relatÃ³rio salvo no S3 (s3_key):
+
+MÃ©todos Implementados:
+
+criar_tabela_incidentes(table_name="net-ai-incidentes"): Cria tabela NoSQL com Partition Key incidente_id (S) e BillingMode='PAY_PER_REQUEST', tratando ResourceInUseException caso jÃ¡ exista.
+
+registrar_incidente(table_name, incidente_id, equipamento, severidade, diagnostico_ia, s3_key, status="PENDENTE"): Insere registro estruturado (put_item) vinculando o evento ao arquivo no S3.
+
+buscar_incidente(table_name, incidente_id): Consulta pela chave primÃ¡ria (get_item) e converte o formato tipado do DynamoDB ({'S': 'valor'}) para dicionÃ¡rio Python limpo.
+
+atualizar_status_incidente(table_name, incidente_id, novo_status): Atualiza o estado do incidente (update_item, ex: ANALISADO â†’ REMEDIADO) usando ExpressionAttributeNames (#st) para evitar conflito com a palavra reservada status.
+
+ValidaÃ§Ã£o (tests/teste_dynamodb.py): Testado ponta a ponta com sucesso (criaÃ§Ã£o da tabela net-ai-incidentes, registro de INC-2026-001, busca e atualizaÃ§Ã£o de status para REMEDIADO).
+
+5. AtualizaÃ§Ãµes de Mensageria e Cofre (17/11/2026)
+ConclusÃ£o integral da camada Cloud no AWSManager (src/cloud/aws_client.py) com a implementaÃ§Ã£o e validaÃ§Ã£o dos trÃªs serviÃ§os restantes:
+
+5.1. MÃ³dulo Secrets Manager (self.secrets_client & tests/teste_secrets.py)
+Cofre de credenciais de automaÃ§Ã£o (mÃ¡quina para mÃ¡quina) para evitar exposiÃ§Ã£o de senhas de roteadores e chaves de API no cÃ³digo-fonte/GitHub:
+
+MÃ©todos Implementados:
+
+criar_segredo(nome_segredo, segredo_dict, descricao=""): Grava dicionÃ¡rios de credenciais (host, usuÃ¡rio, senha, porta) convertidos em JSON no cofre (create_secret), tratando ResourceExistsException.
+
+buscar_segredo(nome_segredo): Recupera credenciais diretamente para a memÃ³ria RAM (get_secret_value) e retorna um dicionÃ¡rio Python limpo.
+
+atualizar_segredo(nome_segredo, novos_dados_dict): Realiza rotaÃ§Ã£o/atualizaÃ§Ã£o de credenciais existentes (put_secret_value).
+
+ValidaÃ§Ã£o (tests/teste_secrets.py): Testado ciclo completo de criaÃ§Ã£o, leitura e rotaÃ§Ã£o de senha para o segredo net-ai/roteadores/mikrotik-borda.
+
+5.2. MÃ³dulo SQS (self.sqs_client & tests/teste_sqs.py)
+Fila assÃ­ncrona que atua como amortecedor para absorver picos de alertas de rede sem sobrecarregar o motor de IA:
+
+MÃ©todos Implementados:
+
+criar_fila(nome_fila="net-ai-alertas-queue"): Cria a fila no SQS (create_queue) e retorna a QueueUrl.
+
+enviar_alerta_fila(queue_url, evento_dict): Publica tickets de incidentes (dicionÃ¡rios convertidos em JSON) na fila (send_message).
+
+consumir_alertas_fila(queue_url, max_mensagens=5): LÃª mensagens usando Long Polling (WaitTimeSeconds=2), converte de volta para dicionÃ¡rio e confirma o processamento removendo cada mensagem via ReceiptHandle (delete_message).
+
+ValidaÃ§Ã£o (tests/teste_sqs.py): Testado envio simultÃ¢neo de alertas (router-borda-sp01 e switch-core-rj01), consumo em lote e confirmaÃ§Ã£o de fila vazia apÃ³s processamento.
+
+5.3. MÃ³dulo SNS (self.sns_client & tests/teste_sns.py)
+ServiÃ§o de mensageria Pub/Sub para disparo imediato de notificaÃ§Ãµes crÃ­ticas aos administradores/NOC:
+
+MÃ©todos Implementados:
+
+criar_topico_alertas(nome_topico="net-ai-alertas-criticos"): Cria o canal de notificaÃ§Ãµes (create_topic) e retorna o TopicArn.
+
+inscrever_alerta(topic_arn, protocolo, endpoint): Inscreve destinatÃ¡rios (email, https, sqs) no tÃ³pico (subscribe).
+
+disparar_alerta_critico(topic_arn, assunto, mensagem): Publica o alerta no tÃ³pico (publish) aplicando fatiamento seguro assunto[:100] para respeitar o limite de caracteres do protocolo de e-mail da AWS.
+
+ValidaÃ§Ã£o (tests/teste_sns.py): Testada criaÃ§Ã£o do tÃ³pico, inscriÃ§Ã£o de e-mail do NOC e disparo de alerta crÃ­tico retornando o MessageId.
+
+6. PrÃ³ximos Passos
+OpÃ§Ã£o B (Motor de AnÃ¡lise de Rede & IA): Iniciar o desenvolvimento das camadas src/network/drivers.py (aplicando Factory Pattern para coleta/parser de logs de roteadores FRR/MikroTik) e src/ai/analyzer.py (aplicando Strategy Pattern para diagnÃ³stico inteligente via LLM/Ollama) integrando com toda a infraestrutura AWSManager jÃ¡ concluÃ­da.
+
+
+# Contexto do Projeto: Net-AI Remediator
+**Data da Ãšltima AtualizaÃ§Ã£o:** 17 de Novembro de 2026
+
+## 1. Resumo do Progresso de Hoje
+Hoje focamos na robustez, seguranÃ§a e inteligÃªncia do motor de IA (`AIAnalyzer`), aplicando conceitos avanÃ§ados de engenharia de software, Strategy Pattern e RAG (Retrieval-Augmented Generation) com persistÃªncia em nuvem simulada.
+
+---
+
+## 2. Componentes Desenvolvidos e Atualizados
+
+### A. Camada de IA & SeguranÃ§a (`src/ai/analyzer.py`)
+* **Modelo Local (Ollama):** IntegraÃ§Ã£o com o `llama3` rodando localmente via API (`http://localhost:11434/api/generate`).
+* **Respostas DeterminÃ­sticas:** ConfiguraÃ§Ã£o de `"temperature": 0.0` no payload do Ollama para eliminar "alucinaÃ§Ãµes" e garantir diagnÃ³sticos tÃ©cnicos consistentes e precisos para engenharia de redes.
+* **Blacklist de SeguranÃ§a de Comandos:** ImplementaÃ§Ã£o do mÃ©todo `_validar_comando_seguro` que barra imediatamente comandos destrutivos perigosos (como `reload`, `format`, `erase`, `delete`, `shutdown`, etc.), permitindo que comandos legÃ­timos de diagnÃ³stico com filtros (como `show ip bgp summary | include ...`) passem de forma flexÃ­vel e segura.
+* **RAG (Contexto HistÃ³rico):** InjeÃ§Ã£o dinÃ¢mica de incidentes passados recuperados do DynamoDB diretamente no prompt da IA, permitindo correlaÃ§Ã£o avanÃ§ada de falhas (ex: identificaÃ§Ã£o de flaps intermitentes e falhas recorrentes na mesma interface).
+
+### B. Camada de SimulaÃ§Ã£o de Rede (`src/network/drivers.py` - Iniciado)
+* **Strategy Pattern (Clean Architecture):** CriaÃ§Ã£o da interface base abstrata (`NetworkDriverInterface`) padronizando o contrato para coleta de logs e execuÃ§Ã£o de comandos de remediaÃ§Ã£o.
+* **Driver Simulado (`SimuladorRoteadorDriver`):** Estrutura inicial criada para simular um roteador de borda (`router-borda-sp01`) gerando logs de queda BGP e simulando a aplicaÃ§Ã£o de remediaÃ§Ãµes na CLI.
+
+---
+
+## 3. PrÃ³ximos Passos Imediatos
+* Finalizar e integrar o fluxo completo do **Simulador de Rede** com o pipeline de ponta a ponta:
+  `Simulador de Rede` $\rightarrow$ `Fila SQS` $\rightarrow$ `IA com RAG (Ollama + DynamoDB)` $\rightarrow$ `Armazenamento de RelatÃ³rio (S3)` $\rightarrow$ `Disparo de Alerta (SNS)`.
+
+
+
+  # Contexto do Projeto: Net-AI Remediator
+**Data da Ãšltima AtualizaÃ§Ã£o:** 18 de Novembro de 2026
+**Status do Projeto:** TransiÃ§Ã£o para Arquitetura de ProduÃ§Ã£o e LaboratÃ³rio AvanÃ§ado (EVE-NG / Dispositivos Reais)
+
+## 1. O Que JÃ¡ Foi ConcluÃ­do
+* **Camada de IA & SeguranÃ§a (`src/ai/analyzer.py`):**
+  * IntegraÃ§Ã£o local com Ollama (`llama3`).
+  * Respostas determinÃ­sticas estritas (`temperature: 0.0`).
+  * Blindagem de comandos (`_validar_comando_seguro`) bloqueando aÃ§Ãµes destrutivas e permitindo diagnÃ³sticos seguros com pipes.
+  * RAG (Retrieval-Augmented Generation) com DynamoDB injetando histÃ³rico de incidentes passados no prompt.
+* **Infraestrutura em Nuvem Local (`LocalStack`):**
+  * ConfiguraÃ§Ã£o e testes validados para S3 (relatÃ³rios), DynamoDB (histÃ³rico) e SQS/SNS (filas e alertas).
+* **Camada de AbstraÃ§Ã£o de Rede (`src/network/drivers.py`):**
+  * CriaÃ§Ã£o do padrÃ£o *Strategy Pattern* (`NetworkDriverInterface`) e do `SimuladorRoteadorDriver` para testes rÃ¡pidos sem dependÃªncia de hardware pesado.
+
+---
+
+## 2. O Que Iremos Construir (Roadmap AvanÃ§ado de Engenharia)
+* **[Pilar 1] Protocolo de Acesso Real (Netmiko):** ImplementaÃ§Ã£o do driver SSH corporativo para interagir com topologias reais ou VMs (EVE-NG/GNS3).
+* **[Pilar 2] ResiliÃªncia e Tratamento de Erros:** Mecanismos de *retry*, timeout e blindagem contra falhas de conexÃ£o de rede.
+* **[Pilar 3] Parsing Inteligente de CLI (TextFSM):** ConversÃ£o de saÃ­das brutas de texto de roteadores em JSON estruturado para consumo otimizado da IA.
+* **[Pilar 4] Sistema de Gatilhos de Eventos (Syslog/Webhooks):** Captura automatizada de logs em tempo real para disparar o pipeline de remediaÃ§Ã£o de ponta a ponta.
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\infra\docker-compose.yml ===
+version: "3.8"
+
+services:
+  localstack:
+    container_name: devops_aws_sim
+    image: localstack/localstack:3.8.1
+    ports:
+      - "127.0.0.1:4566:4566"
+    environment:
+      - SERVICES=s3,dynamodb,sns,sqs,secretsmanager
+      - AWS_DEFAULT_REGION=us-east-1
+      - DEBUG=1
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - net-ai-net
+
+  net-ai-app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: net_ai_remediator_app
+    volumes:
+      - ..:/app
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - LOCALSTACK_HOST=localstack
+    depends_on:
+      - localstack
+    networks:
+      - net-ai-net
+    command: python tests/teste_parser2.py
+
+networks:
+  net-ai-net:
+    driver: bridge
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\__init__.py ===
+
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\ai\analyzer.py ===
+import os
+import json
+import logging
+from typing import Dict, Any, Optional
+import requests
+
+logger = logging.getLogger("AIAnalyzer")
+
+
+
+class NetworkAIAnalyzer:
+    """
+    Motor de anÃ¡lise inteligente com Strategy Pattern, Whitelist flexÃ­vel
+    e Blacklist de SeguranÃ§a contra comandos destrutivos.
+    """
+
+    # Comandos absolutamente proibidos que a IA JAMAIS pode mandar para um roteador
+    COMANDOS_PROIBIDOS = [
+        "reload",
+        "format",
+        "erase",
+        "delete",
+        "rm ",
+        "shutdown",
+        "write erase"
+    ]
+
+    def __init__(self, modelo: str = "llama3", ollama_url: str = "http://localhost:11434/api/generate"):
+        self.modelo = modelo
+        self.ollama_url = ollama_url
+        logger.info(f"AI Analyzer inicializado com o modelo '{self.modelo}' (Ollama) e suporte a RAG.")
+
+    def analisar_log_rede(self, log_bruto: str, equipamento: str, historico_recente: Optional[list] = None) -> Dict[str, Any]:
+        """
+        Envia o log para a IA junto com o histÃ³rico de incidentes recentes recuperados do DynamoDB (RAG).
+        """
+        # Monta a string de contexto histÃ³rico, se houver registros anteriores
+        contexto_historico_str = ""
+        if historico_recente and len(historico_recente) > 0:
+            contexto_historico_str = "\n".join(
+                [f"- Incidente anterior: [{item.get('status')}] {item.get('diagnostico')} (ID: {item.get('incidente_id')})" 
+                 for item in historico_recente]
+            )
+            contexto_historico_str = f"\nHISTÃ“RICO RECENTE DESTE EQUIPAMENTO NAS ÃšLTIMAS HORAS:\n{contexto_historico_str}\n"
+        else:
+            contexto_historico_str = "\nHISTÃ“RICO RECENTE: Nenhum incidente anterior registrado recentemente (Primeiro evento).\n"
+
+        prompt = f"""
+        VocÃª Ã© um Engenheiro SÃªnior de Redes e DevOps especialista em correlaÃ§Ã£o de falhas.
+        {contexto_historico_str}
+        Analise o log de erro atual abaixo do equipamento '{equipamento}' e retorne APENAS um objeto JSON vÃ¡lido (sem markdown, sem crases ```json) com exatamente estas chaves:
+        - "diagnostico": ExplicaÃ§Ã£o tÃ©cnica clara e direta da causa raiz. Considere o histÃ³rico acima para detectar se Ã© um problema recorrente (ex: flap intermitente).
+        - "severidade": "BAIXA", "MEDIA", "ALTA" ou "CRITICA".
+        - "comando_remediacao": Um comando CLI seguro para mitigar o problema.
+
+        LOG ATUAL DO EQUIPAMENTO:
+        {log_bruto}
+        """
+
+        payload = {
+            "model": self.modelo,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0.0
+            }
+        }
+
+        try:
+            logger.info(f"Enviando log do equipamento {equipamento} com contexto RAG para a IA...")
+            response = requests.post(self.ollama_url, json=payload, timeout=90)
+            
+            if response.status_code != 200:
+                logger.error(f"Erro na API do Ollama: Status {response.status_code}")
+                return self._fallback_resposta(log_bruto)
+
+            resposta_json = response.json()
+            texto_gerado = resposta_json.get("response", "{}")
+            
+            diagnostico_dict = json.loads(texto_gerado)
+            
+            # ValidaÃ§Ã£o de SeguranÃ§a (Whitelist)
+            comando_sugerido = diagnostico_dict.get("comando_remediacao", "")
+            if not self._validar_comando_seguro(comando_sugerido):
+                logger.warning(f"ALERTA DE SEGURANÃ‡A: Comando bloqueado: '{comando_sugerido}'")
+                diagnostico_dict["comando_remediacao"] = "show logging (Comando original bloqueado por seguranÃ§a)"
+                diagnostico_dict["diagnostico"] += " [Aviso: RemediaÃ§Ã£o restrita por polÃ­tica de seguranÃ§a]."
+
+            logger.info("AnÃ¡lise com RAG concluÃ­da e validada com sucesso.")
+            return diagnostico_dict
+
+        except requests.exceptions.ConnectionError:
+            logger.warning("Ollama nÃ£o estÃ¡ rodando localmente. Usando fallback.")
+            return self._fallback_resposta(log_bruto)
+        except Exception as e:
+            logger.error(f"Erro inesperado ao consultar a IA: {e}")
+            return self._fallback_resposta(log_bruto)
+
+    def _validar_comando_seguro(self, comando: str) -> bool:
+        """
+        Nova regra: Permite qualquer comando de diagnÃ³stico/leitura (como show com filtros),
+        mas barra imediatamente qualquer tentativa de usar comandos destrutivos.
+        """
+        comando_limpo = comando.strip().lower()
+        
+        # Se contiver qualquer palavra perigosa, bloqueia na hora!
+        for perigoso in self.COMANDOS_PROIBIDOS:
+            if perigoso in comando_limpo:
+                logger.warning(f"BLINDAGEM ATIVA: Comando destrutivo detectado e bloqueado: '{comando}'")
+                return False
+                
+        return True
+
+    def _fallback_resposta(self, log_bruto: str) -> Dict[str, Any]:
+        return {
+            "diagnostico": f"AnÃ¡lise offline de seguranÃ§a com histÃ³rico. Log: {log_bruto[:60]}...",
+            "severidade": "MEDIA",
+            "comando_remediacao": "show logging"
+        }
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\ai\__init__.py ===
+
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\cloud\aws_client.py ===
+import logging
+from typing import Any, Dict, List, Optional
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
+import json
+import secrets
+import string
+
+# ConfiguraÃ§Ã£o profissional de logs (data, nÃ­vel e mensagem)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("AWSManager")
+
+
+class AWSManager:
+    def __init__(self, endpoint_url: str = "http://localhost:4566", region_name: str = "us-east-1"):
+        self.endpoint_url = endpoint_url
+        self.region_name = region_name
+        
+        self.aws_access_key_id = "test"
+        self.aws_secret_access_key = "test"
+
+        # ForÃ§a path-style para evitar erros de DNS local no Windows com LocalStack
+        config_s3 = Config(
+            s3={'addressing_style': 'path'},
+            retries={'max_attempts': 3, 'mode': 'standard'}
+        )
+
+        self.s3_client = boto3.client(
+            's3',
+            endpoint_url=self.endpoint_url,
+            region_name=self.region_name,
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key,
+            config=config_s3
+        )
+
+        self.dynamodb_client = boto3.client(
+            'dynamodb',
+            endpoint_url=self.endpoint_url,
+            region_name=self.region_name,
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key
+        )
+
+        self.secrets_client = boto3.client(
+            'secretsmanager',
+            endpoint_url=self.endpoint_url,
+            region_name=self.region_name,
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key
+        )
+
+        self.sqs_client = boto3.client(
+            'sqs',
+            endpoint_url=self.endpoint_url,
+            region_name=self.region_name,
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key
+        )
+
+        self.sns_client = boto3.client(
+            'sns',
+            endpoint_url=self.endpoint_url,
+            region_name=self.region_name,
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key
+        )
+
+    # =========================================================================
+    # OPERAÃ‡Ã•ES BÃSICAS DE BUCKET E ARQUIVOS FÃSICOS
+    # =========================================================================
+
+    def criar_bucket(self, bucket_name: str) -> bool:
+        """Cria um novo bucket no S3."""
+        try:
+            self.s3_client.create_bucket(Bucket=bucket_name)
+            logger.info(f"Bucket '{bucket_name}' criado com sucesso.")
+            return True
+        except ClientError as e:
+            logger.error(f"Erro AWS ao criar bucket '{bucket_name}': {e.response['Error']['Message']}")
+            return False
+        except Exception as e:
+            logger.error(f"Erro inesperado ao criar bucket '{bucket_name}': {e}")
+            return False
+
+    def listar_buckets(self) -> List[str]:
+        """Retorna e registra todos os buckets disponÃ­veis."""
+        try:
+            response = self.s3_client.list_buckets()
+            buckets = [b['Name'] for b in response.get('Buckets', [])]
+            logger.info(f"Buckets encontrados ({len(buckets)}): {buckets}")
+            return buckets
+        except Exception as e:
+            logger.error(f"Erro ao listar buckets: {e}")
+            return []
+
+    def enviar_arquivo(
+        self,
+        file_name: str,
+        bucket_name: str,
+        object_name: Optional[str] = None,
+        metadata: Optional[Dict[str, str]] = None
+    ) -> bool:
+        """Faz upload de um arquivo fÃ­sico do disco para o S3, com suporte a metadados."""
+        if object_name is None:
+            object_name = file_name
+
+        extra_args = {}
+        if metadata:
+            extra_args['Metadata'] = metadata
+
+        try:
+            self.s3_client.upload_file(file_name, bucket_name, object_name, ExtraArgs=extra_args)
+            logger.info(f"Arquivo '{file_name}' enviado para '{bucket_name}/{object_name}'.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao enviar arquivo '{file_name}': {e}")
+            return False
+
+    def baixar_arquivo(self, bucket_name: str, object_name: str, file_name: str) -> bool:
+        """Baixa um objeto do S3 para um arquivo local no disco."""
+        try:
+            self.s3_client.download_file(bucket_name, object_name, file_name)
+            logger.info(f"Objeto '{object_name}' baixado para '{file_name}'.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao baixar '{object_name}': {e}")
+            return False
+
+    def deletar_arquivo(self, bucket_name: str, object_name: str) -> bool:
+        """Remove um objeto especÃ­fico de dentro do bucket."""
+        try:
+            self.s3_client.delete_object(Bucket=bucket_name, Key=object_name)
+            logger.info(f"Objeto '{object_name}' deletado de '{bucket_name}'.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao deletar '{object_name}': {e}")
+            return False
+
+    def gerar_url_presassinada(self, bucket_name: str, object_name: str, expiration: int = 3600) -> Optional[str]:
+        """Gera uma URL temporÃ¡ria e assinada para acesso seguro a um objeto privado."""
+        try:
+            url = self.s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket_name, 'Key': object_name},
+                ExpiresIn=expiration
+            )
+            logger.info(f"URL prÃ©-assinada gerada para '{object_name}' (validade: {expiration}s).")
+            return url
+        except Exception as e:
+            logger.error(f"Erro ao gerar URL prÃ©-assinada para '{object_name}': {e}")
+            return None
+
+    # =========================================================================
+    # EVOLUÃ‡Ã•ES S3: MEMÃ“RIA RAM, PREFIXOS, EXISTÃŠNCIA E METADADOS/TAGS
+    # =========================================================================
+
+    def enviar_conteudo_texto(
+        self,
+        conteudo: str,
+        bucket_name: str,
+        object_name: str,
+        metadata: Optional[Dict[str, str]] = None,
+        content_type: str = "text/plain; charset=utf-8"
+    ) -> bool:
+        """Envia uma string (logs, JSON, relatÃ³rios da IA) direto da memÃ³ria RAM para o S3."""
+        try:
+            kwargs = {
+                "Bucket": bucket_name,
+                "Key": object_name,
+                "Body": conteudo.encode("utf-8"),
+                "ContentType": content_type
+            }
+            if metadata:
+                kwargs["Metadata"] = metadata
+
+            self.s3_client.put_object(**kwargs)
+            logger.info(f"ConteÃºdo em memÃ³ria gravado em '{bucket_name}/{object_name}'.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao gravar conteÃºdo em memÃ³ria em '{object_name}': {e}")
+            return False
+
+    def ler_conteudo_texto(self, bucket_name: str, object_name: str) -> Optional[str]:
+        """LÃª o conteÃºdo de um objeto do S3 diretamente para uma string na memÃ³ria RAM."""
+        try:
+            response = self.s3_client.get_object(Bucket=bucket_name, Key=object_name)
+            texto = response["Body"].read().decode("utf-8")
+            logger.info(f"ConteÃºdo de '{object_name}' lido para memÃ³ria ({len(texto)} caracteres).")
+            return texto
+        except ClientError as e:
+            logger.error(f"Erro AWS ao ler '{object_name}': {e.response['Error']['Message']}")
+            return None
+        except Exception as e:
+            logger.error(f"Erro inesperado ao ler '{object_name}': {e}")
+            return None
+
+    def listar_arquivos(self, bucket_name: str, prefixo: str = "") -> List[str]:
+        """Lista chaves de objetos no bucket, filtrando opcionalmente por prefixo (ex: 'logs/')."""
+        try:
+            response = self.s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefixo)
+            objetos = [item["Key"] for item in response.get("Contents", [])]
+            logger.info(f"Listagem em '{bucket_name}' (prefixo='{prefixo}'): {len(objetos)} objeto(s).")
+            return objetos
+        except Exception as e:
+            logger.error(f"Erro ao listar objetos com prefixo '{prefixo}': {e}")
+            return []
+
+    def arquivo_existe(self, bucket_name: str, object_name: str) -> bool:
+        """Verifica de forma leve (HEAD request) se um objeto existe no bucket."""
+        try:
+            self.s3_client.head_object(Bucket=bucket_name, Key=object_name)
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+                return False
+            logger.error(f"Erro AWS ao verificar existÃªncia de '{object_name}': {e}")
+            return False
+
+    def obter_metadados(self, bucket_name: str, object_name: str) -> Optional[Dict[str, str]]:
+        """Recupera os metadados customizados gravados no cabeÃ§alho do objeto."""
+        try:
+            response = self.s3_client.head_object(Bucket=bucket_name, Key=object_name)
+            return response.get("Metadata", {})
+        except Exception as e:
+            logger.error(f"Erro ao obter metadados de '{object_name}': {e}")
+            return None
+
+    def definir_tags(self, bucket_name: str, object_name: str, tags: Dict[str, str]) -> bool:
+        """Aplica ou atualiza tags dinÃ¢micas em um objeto existente no S3."""
+        try:
+            tag_set = [{"Key": k, "Value": v} for k, v in tags.items()]
+            self.s3_client.put_object_tagging(
+                Bucket=bucket_name,
+                Key=object_name,
+                Tagging={"TagSet": tag_set}
+            )
+            logger.info(f"Tags aplicadas em '{object_name}': {tags}")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao aplicar tags em '{object_name}': {e}")
+            return False
+
+    def obter_tags(self, bucket_name: str, object_name: str) -> Dict[str, str]:
+        """LÃª as tags associadas a um objeto no S3."""
+        try:
+            response = self.s3_client.get_object_tagging(Bucket=bucket_name, Key=object_name)
+            return {t["Key"]: t["Value"] for t in response.get("TagSet", [])}
+        except Exception as e:
+            logger.error(f"Erro ao ler tags de '{object_name}': {e}")
+            return {}
+
+# =========================================================================
+    # OPERAÃ‡Ã•ES DYNAMODB: HISTÃ“RICO ESTRUTURADO DE INCIDENTES
+    # =========================================================================
+
+    def criar_tabela_incidentes(self, table_name: str = "net-ai-incidentes") -> bool:
+        """Cria a tabela NoSQL no DynamoDB para armazenar o histÃ³rico de incidentes."""
+        try:
+            self.dynamodb_client.create_table(
+                TableName=table_name,
+                KeySchema=[
+                    {'AttributeName': 'incidente_id', 'KeyType': 'HASH'}  # Partition Key
+                ],
+                AttributeDefinitions=[
+                    {'AttributeName': 'incidente_id', 'AttributeType': 'S'}  # String
+                ],
+                BillingMode='PAY_PER_REQUEST'
+            )
+            logger.info(f"Tabela DynamoDB '{table_name}' criada com sucesso.")
+            return True
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ResourceInUseException':
+                logger.info(f"Tabela DynamoDB '{table_name}' jÃ¡ existe.")
+                return True
+            logger.error(f"Erro AWS ao criar tabela '{table_name}': {e.response['Error']['Message']}")
+            return False
+        except Exception as e:
+            logger.error(f"Erro inesperado ao criar tabela '{table_name}': {e}")
+            return False
+
+    def registrar_incidente(
+        self,
+        table_name: str,
+        incidente_id: str,
+        equipamento: str,
+        severidade: str,
+        diagnostico_ia: str,
+        s3_key: str,
+        status: str = "PENDENTE"
+    ) -> bool:
+        """Insere um novo registro estruturado de incidente no DynamoDB."""
+        try:
+            self.dynamodb_client.put_item(
+                TableName=table_name,
+                Item={
+                    'incidente_id': {'S': incidente_id},
+                    'equipamento': {'S': equipamento},
+                    'severidade': {'S': severidade},
+                    'diagnostico_ia': {'S': diagnostico_ia},
+                    's3_key': {'S': s3_key},
+                    'status': {'S': status}
+                }
+            )
+            logger.info(f"Incidente '{incidente_id}' registrado no DynamoDB (equipamento: {equipamento}).")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao registrar incidente '{incidente_id}': {e}")
+            return False
+
+    def buscar_incidente(self, table_name: str, incidente_id: str) -> Optional[Dict[str, Any]]:
+        """Busca um incidente especÃ­fico pela chave primÃ¡ria e converte para dict Python limpo."""
+        try:
+            response = self.dynamodb_client.get_item(
+                TableName=table_name,
+                Key={'incidente_id': {'S': incidente_id}}
+            )
+            item = response.get('Item')
+            if not item:
+                logger.warning(f"Incidente '{incidente_id}' nÃ£o encontrado na tabela '{table_name}'.")
+                return None
+
+            # Converte o formato tipado do DynamoDB ({'S': 'valor'}) para dicionÃ¡rio padrÃ£o
+            dados_limpos = {k: list(v.values())[0] for k, v in item.items()}
+            logger.info(f"Incidente '{incidente_id}' recuperado com sucesso.")
+            return dados_limpos
+        except Exception as e:
+            logger.error(f"Erro ao buscar incidente '{incidente_id}': {e}")
+            return None
+
+    def atualizar_status_incidente(self, table_name: str, incidente_id: str, novo_status: str) -> bool:
+        """Atualiza o status de um incidente (ex: PENDENTE -> REMEDIADO)."""
+        try:
+            self.dynamodb_client.update_item(
+                TableName=table_name,
+                Key={'incidente_id': {'S': incidente_id}},
+                UpdateExpression="SET #st = :val",
+                ExpressionAttributeNames={'#st': 'status'},  # 'status' Ã© palavra reservada no DynamoDB
+                ExpressionAttributeValues={':val': {'S': novo_status}}
+            )
+            logger.info(f"Status do incidente '{incidente_id}' atualizado para '{novo_status}'.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao atualizar status do incidente '{incidente_id}': {e}")
+            return False
+
+    # =========================================================================
+    # OPERAÃ‡Ã•ES SECRETS MANAGER: COFRE DE CREDENCIAIS E CHAVES DE API
+    # =========================================================================
+
+    def criar_segredo(self, nome_segredo: str, segredo_dict: Dict[str, str], descricao: str = "") -> bool:
+        """Cria um novo segredo (dicionÃ¡rio convertido em JSON) no cofre da AWS."""
+        try:
+            self.secrets_client.create_secret(
+                Name=nome_segredo,
+                Description=descricao,
+                SecretString=json.dumps(segredo_dict)
+            )
+            logger.info(f"Segredo '{nome_segredo}' guardado com sucesso no cofre.")
+            return True
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ResourceExistsException':
+                logger.warning(f"Segredo '{nome_segredo}' jÃ¡ existe no cofre.")
+                return False
+            logger.error(f"Erro AWS ao criar segredo '{nome_segredo}': {e.response['Error']['Message']}")
+            return False
+        except Exception as e:
+            logger.error(f"Erro inesperado ao criar segredo '{nome_segredo}': {e}")
+            return False
+
+    def buscar_segredo(self, nome_segredo: str) -> Optional[Dict[str, str]]:
+        """Recupera um segredo do cofre e o converte de volta para dicionÃ¡rio Python."""
+        try:
+            response = self.secrets_client.get_secret_value(SecretId=nome_segredo)
+            segredo_str = response.get('SecretString')
+            if not segredo_str:
+                return None
+
+            logger.info(f"Segredo '{nome_segredo}' recuperado do cofre em memÃ³ria.")
+            return json.loads(segredo_str)
+        except ClientError as e:
+            logger.error(f"Erro AWS ao buscar segredo '{nome_segredo}': {e.response['Error']['Message']}")
+            return None
+        except Exception as e:
+            logger.error(f"Erro inesperado ao buscar segredo '{nome_segredo}': {e}")
+            return None
+
+    def atualizar_segredo(self, nome_segredo: str, novos_dados_dict: Dict[str, str]) -> bool:
+        """Atualiza o valor de um segredo jÃ¡ existente no cofre."""
+        try:
+            self.secrets_client.put_secret_value(
+                SecretId=nome_segredo,
+                SecretString=json.dumps(novos_dados_dict)
+            )
+            logger.info(f"Segredo '{nome_segredo}' atualizado com sucesso.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao atualizar segredo '{nome_segredo}': {e}")
+            return False
+
+    def gerar_senha_forte(self, tamanho: int = 20) -> str:
+        """Gera uma senha aleatÃ³ria criptograficamente segura (letras, nÃºmeros e sÃ­mbolos)."""
+        alfabeto = string.ascii_letters + string.digits + "!@#$%&*-_=+"
+        senha = ''.join(secrets.choice(alfabeto) for _ in range(tamanho))
+        logger.info(f"Nova senha segura gerada ({tamanho} caracteres).")
+        return senha
+
+
+    # =========================================================================
+    # OPERAÃ‡Ã•ES SQS: FILA DE ALERTAS DE REDE
+    # =========================================================================
+
+    def criar_fila(self, nome_fila: str = "net-ai-alertas-queue") -> Optional[str]:
+        """Cria uma fila no SQS e retorna a URL dela."""
+        try:
+            response = self.sqs_client.create_queue(QueueName=nome_fila)
+            queue_url = response.get('QueueUrl')
+            logger.info(f"Fila SQS '{nome_fila}' pronta. URL: {queue_url}")
+            return queue_url
+        except Exception as e:
+            logger.error(f"Erro ao criar fila SQS '{nome_fila}': {e}")
+            return None
+
+
+    def enviar_alerta_fila(self, queue_url: str, evento_dict: Dict[str, Any]) -> bool:
+        """Envia um evento de rede (dicionÃ¡rio convertido em JSON) para a fila."""
+        try:
+            self.sqs_client.send_message(
+                QueueUrl=queue_url,
+                MessageBody=json.dumps(evento_dict)
+            )
+            logger.info(f"Alerta do equipamento '{evento_dict.get('equipamento')}' enviado para a fila.")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao enviar mensagem para a fila SQS: {e}")
+            return False
+        
+
+    def consumir_alertas_fila(self, queue_url: str, max_mensagens: int = 5) -> List[Dict[str, Any]]:
+        """LÃª os alertas pendentes na fila, converte de volta para dict e apaga da fila."""
+        eventos_processados: List[Dict[str, Any]] = []
+        try:
+            response = self.sqs_client.receive_message(
+                QueueUrl=queue_url,
+                MaxNumberOfMessages=max_mensagens,
+                WaitTimeSeconds=2  # Long Polling: espera atÃ© 2s se a fila estiver vazia
+            )
+
+            mensagens = response.get('Messages', [])
+            if not mensagens:
+                logger.info("Nenhum alerta pendente na fila SQS.")
+                return []
+
+            for msg in mensagens:
+                corpo_dict = json.loads(msg['Body'])
+                eventos_processados.append(corpo_dict)
+
+                # Confirma o recebimento apagando a mensagem da fila pelo ReceiptHandle
+                self.sqs_client.delete_message(
+                    QueueUrl=queue_url,
+                    ReceiptHandle=msg['ReceiptHandle']
+                )
+
+            logger.info(f"{len(eventos_processados)} alerta(s) consumido(s) e removido(s) da fila.")
+            return eventos_processados
+        except Exception as e:
+            logger.error(f"Erro ao consumir mensagens da fila SQS: {e}")
+            return []
+
+    # =========================================================================
+    # OPERAÃ‡Ã•ES SNS: DISPARO DE NOTIFICAÃ‡Ã•ES E ALERTAS CRÃTICOS
+    # =========================================================================
+
+    def criar_topico_alertas(self, nome_topico: str = "net-ai-alertas-criticos") -> Optional[str]:
+        """Cria um canal (TÃ³pico) no SNS para alertas crÃ­ticos e retorna o TopicArn."""
+        try:
+            response = self.sns_client.create_topic(Name=nome_topico)
+            topic_arn = response.get('TopicArn')
+            logger.info(f"TÃ³pico SNS '{nome_topico}' pronto. ARN: {topic_arn}")
+            return topic_arn
+        except Exception as e:
+            logger.error(f"Erro ao criar tÃ³pico SNS '{nome_topico}': {e}")
+            return None
+
+    def inscrever_alerta(self, topic_arn: str, protocolo: str, endpoint: str) -> Optional[str]:
+        """Inscreve um destino (ex: 'email', 'https', 'sqs') no tÃ³pico SNS."""
+        try:
+            response = self.sns_client.subscribe(
+                TopicArn=topic_arn,
+                Protocol=protocolo,
+                Endpoint=endpoint
+            )
+            sub_arn = response.get('SubscriptionArn')
+            logger.info(f"InscriÃ§Ã£o realizada no tÃ³pico ({protocolo} -> {endpoint}).")
+            return sub_arn
+        except Exception as e:
+            logger.error(f"Erro ao inscrever '{endpoint}' no tÃ³pico SNS: {e}")
+            return None
+
+    def disparar_alerta_critico(self, topic_arn: str, assunto: str, mensagem: str) -> Optional[str]:
+        """Publica um alerta no tÃ³pico SNS para notificar todos os inscritos."""
+        try:
+            response = self.sns_client.publish(
+                TopicArn=topic_arn,
+                Subject=assunto[:100],  # A AWS limita o assunto de e-mail SNS a 100 caracteres
+                Message=mensagem
+            )
+            msg_id = response.get('MessageId')
+            logger.info(f"Alerta crÃ­tico disparado via SNS! MessageId: {msg_id}")
+            return msg_id
+        except Exception as e:
+            logger.error(f"Erro ao disparar alerta no SNS: {e}")
+            return None
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\cloud\__init__.py ===
+
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\core\config.py ===
+
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\core\models.py ===
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass
+class DiagnosticoIA:
+    diagnostico: str
+    severidade: str
+    comando_remediacao: str
+
+
+@dataclass
+class IncidenteRede:
+    incidente_id: str
+    equipamento: str
+    severidade: str
+    diagnostico: str
+    comando_remediacao: str
+    s3_key: Optional[str] = None
+    status: str = "PENDENTE"
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\core\__init__.py ===
+
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\network\drivers.py ===
+import time
+import logging
+from abc import ABC, abstractmethod
+from typing import Optional
+
+try:
+    from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
+    NETMIKO_DISPONIVEL = True
+except ImportError:
+    NETMIKO_DISPONIVEL = False
+
+logger = logging.getLogger("NetworkDriver")
+
+
+
+class NetworkDriverInterface(ABC):
+    @abstractmethod
+    def coletar_logs_recentes(self) -> str:
+        pass
+
+    @abstractmethod
+    def aplicar_remediacao(self, comando: str) -> bool:
+        pass
+
+
+class SimuladorRoteadorDriver(NetworkDriverInterface):
+    def __init__(self, nome_equipamento: str):
+        self.nome_equipamento = nome_equipamento
+        logger.info(f"Driver simulado inicializado: {self.nome_equipamento}")
+
+    def coletar_logs_recentes(self) -> str:
+        return "%BGP-5-ADJCHANGE: neighbor 10.255.0.2 Down - Hold Timer Expired. Interface Ethernet0/0 flap detected."
+
+    def aplicar_remediacao(self, comando: str) -> bool:
+        print(f"--> [SIMULADOR CLI {self.nome_equipamento}] Comando aplicado com sucesso: {comando}")
+        return True
+
+
+class NetmikoRouterDriver(NetworkDriverInterface):
+    """
+    Driver de ProduÃ§Ã£o/LaboratÃ³rio real com resiliÃªncia, retry e tratamento avanÃ§ado de erros (Pilar 1 e 2).
+    """
+
+    def __init__(self, device_type: str, ip: str, username: str, secret: str, port: int = 22, max_retries: int = 3, retry_delay: int = 2):
+        if not NETMIKO_DISPONIVEL:
+            raise ImportError("A biblioteca 'netmiko' nÃ£o estÃ¡ instalada. Execute: pip install netmiko")
+        
+        self.device_config = {
+            'device_type': device_type,
+            'host': ip,
+            'username': username,
+            'password': secret,
+            'secret': secret,
+            'port': port,
+            'timeout': 10,
+            'session_timeout': 15
+        }
+        self.ip = ip
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        logger.info(f"Driver Netmiko resiliente configurado para o host: {self.ip} (Max retries: {max_retries})")
+
+    def _executar_com_retry(self, func, *args, **kwargs):
+        """Executa uma operaÃ§Ã£o com novas tentativas e intervalo crescente (backoff)."""
+        tentativa = 0
+        delay_atual = self.retry_delay
+        while tentativa < self.max_retries:
+            tentativa += 1
+            try:
+                return func(*args, **kwargs)
+            except NetmikoTimeoutException as e:
+                logger.warning(
+                    f"[TENTATIVA {tentativa}/{self.max_retries}] Timeout em {self.ip}. "
+                    f"Tentando novamente em {delay_atual}s..."
+                )
+                if tentativa == self.max_retries:
+                    logger.error(
+                        f"[FALHA CRÃTICA] Esgotadas {self.max_retries} tentativas em {self.ip}."
+                    )
+                    raise ConnectionError(f"Timeout persistente com o roteador {self.ip}") from e
+                time.sleep(delay_atual)
+                delay_atual *= 2
+            except NetmikoAuthenticationException:
+                logger.error(
+                    f"[ERRO DE SEGURANÃ‡A] Falha de autenticaÃ§Ã£o SSH em {self.ip}. "
+                    "Tentativas canceladas."
+                )
+                raise PermissionError(f"Falha de autenticaÃ§Ã£o no roteador {self.ip}")
+            except Exception as e:
+                logger.error(
+                    f"[ERRO INESPERADO] Falha na tentativa {tentativa} com {self.ip}: {str(e)}"
+                )
+                if tentativa == self.max_retries:
+                    raise
+                time.sleep(delay_atual)
+
+    def coletar_logs_recentes(self) -> str:
+        def _acao():
+            with ConnectHandler(**self.device_config) as conn:
+                return conn.send_command("show ip bgp summary")
+        
+        logger.info(f"Iniciando coleta com polÃ­tica de resiliÃªncia em {self.ip}...")
+        return self._executar_com_retry(_acao)
+
+    def aplicar_remediacao(self, comando: str) -> bool:
+        def _acao():
+            with ConnectHandler(**self.device_config) as conn:
+                conn.enable()
+                output = conn.send_config_set([comando]) if "config" in comando.lower() else conn.send_command(comando)
+                logger.info(f"Comando aplicado com sucesso em {self.ip}. SaÃ­da:\n{output}")
+                return True
+
+        logger.info(f"Iniciando remediaÃ§Ã£o com polÃ­tica de resiliÃªncia em {self.ip}: '{comando}'")
+        try:
+            return self._executar_com_retry(_acao)
+        except Exception as e:
+            logger.error(f"[FALHA NA REMEDIAÃ‡ÃƒO] NÃ£o foi possÃ­vel aplicar o comando em {self.ip}: {str(e)}")
+            return False
+
+
+class NetworkDriverFactory:
+    @staticmethod
+    def criar_driver(tipo: str, **kwargs) -> NetworkDriverInterface:
+        tipo_normalizado = tipo.lower()
+        if tipo_normalizado == "simulador":
+            return SimuladorRoteadorDriver(nome_equipamento=kwargs.get("nome_equipamento", "router-borda-sp01"))
+        elif tipo_normalizado == "netmiko":
+            return NetmikoRouterDriver(
+                device_type=kwargs.get("device_type", "cisco_ios"),
+                ip=kwargs.get("ip"),
+                username=kwargs.get("username"),
+                secret=kwargs.get("secret"),
+                port=kwargs.get("port", 22),
+                max_retries=kwargs.get("max_retries", 3)
+            )
+        else:
+            raise ValueError(f"Tipo de driver desconhecido: '{tipo}'.")
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\network\parser.py ===
+import logging
+import json
+import io
+from textfsm import TextFSM
+
+logger = logging.getLogger("NetworkParser")
+
+class NetworkParser:
+    """
+    ResponsÃ¡vel por transformar saÃ­das brutas de CLI de roteadores em estruturas limpas utilizando TextFSM.
+    """
+    
+    @staticmethod
+    def parsear_texto(template_str: str, raw_output: str) -> list:
+        """
+        Recebe o conteÃºdo de um template TextFSM em string e a saÃ­da bruta do comando,
+        retornando uma lista de dicionÃ¡rios estruturados.
+        """
+        try:
+            template_file = io.StringIO(template_str)
+            fsm = TextFSM(template_file)
+            resultado = fsm.ParseText(raw_output)
+            
+            dados_estruturados = [
+                dict(zip(fsm.header, linha)) for linha in resultado
+            ]
+            logger.info(f"Parsing concluÃ­do com sucesso. {len(dados_estruturados)} registros extraÃ­dos.")
+            return dados_estruturados
+        except Exception as e:
+            logger.error(f"Erro ao processar o TextFSM: {str(e)}")
+            return []
+
+    @staticmethod
+    def parsear_arquivo(template_path: str, raw_output: str) -> list:
+        """
+        LÃª um arquivo de template TextFSM do disco e aplica na saÃ­da bruta do comando.
+        """
+        try:
+            with open(template_path, "r", encoding="utf-8") as f:
+                template_conteudo = f.read()
+                
+            return NetworkParser.parsear_texto(template_conteudo, raw_output)
+        except Exception as e:
+            logger.error(f"Erro ao carregar o arquivo de template {template_path}: {str(e)}")
+            return []
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\network\__init__.py ===
+
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\network\templates\bgp_summary.template ===
+Value NEIGHBOR ([0-9.]+)
+Value V (\d+)
+Value AS (\d+)
+Value MSGRCV (\d+)
+Value MSGSND (\d+)
+Value TQ (\d+)
+Value INQ (\d+)
+Value UPDQ (\d+)
+Value STATE_PFXRCV (\d+)
+
+Start
+  ^${NEIGHBOR}\s+${V}\s+${AS}\s+${MSGRCV}\s+${MSGSND}\s+${TQ}\s+${INQ}\s+${UPDQ}\s+${STATE_PFXRCV}\s*$$ -> Record
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\src\network\templates\cisco_ios_show_ip_bgp_summary.template ===
+Value Required NEIGHBOR ([0-9a-fA-F\.:]+)
+Value V (\d+)
+Value AS (\d+)
+Value MSGRCV (([0-9]+|-))
+Value MSGSND (([0-9]+|-))
+Value TQ (([0-9]+|-))
+Value INQ (([0-9]+|-))
+Value UPDQ (([0-9]+|-))
+Value STATE_PFXRCV ([a-zA-Z0-9]+)
+
+Start
+  ^${NEIGHBOR}\s+${V}\s+${AS}\s+${MSGRCV}\s+${MSGSND}\s+${TQ}\s+${INQ}\s+${UPDQ}\s+${STATE_PFXRCV} -> Record
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_ai.py ===
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.ai.analyzer import NetworkAIAnalyzer
+
+
+def testar_analisador_ia():
+    print("\n--- INICIANDO TESTE DO ANALISADOR DE IA ---")
+    
+    ai = NetworkAIAnalyzer(modelo="llama3")
+
+    # Simulando um log de falha real de roteamento
+    log_falha = (
+        "%BGP-5-ADJCHANGE: neighbor 10.255.0.2 Down - Hold Timer Expired. "
+        "Interface Ethernet0/0 flap detected. Packet loss reached 45%."
+    )
+    equipamento_alvo = "router-borda-sp01"
+
+    print(f"\n[Log Bruto] {log_falha}")
+    resultado = ai.analisar_log_rede(log_bruto=log_falha, equipamento=equipamento_alvo)
+
+    print("\n--- RESULTADO DA ANÃLISE DA IA ---")
+    print(f"DiagnÃ³stico: {resultado.get('diagnostico')}")
+    print(f"Severidade:  {resultado.get('severidade')}")
+    print(f"RemediaÃ§Ã£o:  {resultado.get('comando_remediacao')}")
+
+
+if __name__ == "__main__":
+    testar_ai = testar_analisador_ia()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_ai_rag.py ===
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.ai.analyzer import NetworkAIAnalyzer
+
+
+def testar_ai_com_rag():
+    print("\n--- INICIANDO TESTE DE IA COM CONTEXTO RAG (HISTÃ“RICO) ---")
+    
+    ai = NetworkAIAnalyzer(modelo="llama3")
+
+    # Simulando que o DynamoDB nos devolveu 2 quedas anteriores deste mesmo roteador hoje
+    historico_ficticio_dynamodb = [
+        {
+            "incidente_id": "INC-2026-1117-01",
+            "status": "ANALISADO",
+            "diagnostico": "Queda anterior de BGP na interface Ethernet0/0 devido a timeout."
+        },
+        {
+            "incidente_id": "INC-2026-1117-02",
+            "status": "ANALISADO",
+            "diagnostico": "Segundo flap consecutivo na mesma interface Ethernet0/0."
+        }
+    ]
+
+    log_atual = "%BGP-5-ADJCHANGE: neighbor 10.255.0.2 Down - Hold Timer Expired. 3rd flap in 30 minutes."
+    equipamento_alvo = "router-borda-sp01"
+
+    print(f"\n[Equipamento] {equipamento_alvo}")
+    print(f"[Log Atual] {log_atual}")
+    print(f"[RAG] Fornecendo {len(historico_ficticio_dynamodb)} incidentes anteriores do DynamoDB para a IA...")
+
+    resultado = ai.analisar_log_rede(
+        log_bruto=log_atual,
+        equipamento=equipamento_alvo,
+        historico_recente=historico_ficticio_dynamodb
+    )
+
+    print("\n--- RESULTADO DA ANÃLISE COM HISTÃ“RICO (RAG) ---")
+    print(f"DiagnÃ³stico: {resultado.get('diagnostico')}")
+    print(f"Severidade:  {resultado.get('severidade')}")
+    print(f"RemediaÃ§Ã£o:  {resultado.get('comando_remediacao')}")
+
+
+if __name__ == "__main__":
+    testar_ai_com_rag()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_aws_16_11_26.py ===
+import sys
+import os
+import json
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.cloud.aws_client import AWSManager
+
+
+def testar_evolucoes_s3():
+    aws = AWSManager()
+    bucket = "net-ai-bucket-teste-2026"
+    aws.criar_bucket(bucket)
+
+    print("\n--- 1. TESTE DE ESCRITA DIRETO DA MEMÃ“RIA + METADADOS ---")
+    relatorio_ia = json.dumps({
+        "equipamento": "router-borda-sp01",
+        "anomalia": "BGP Flap detectado na interface eth0",
+        "acao_sugerida": "Aplicar route-map de damping e verificar MTU"
+    }, indent=2, ensure_ascii=False)
+
+    chave_relatorio = "relatorios/2026-11/incidente_001.json"
+    chave_log = "logs/router-borda-sp01/syslog_raw.txt"
+
+    aws.enviar_conteudo_texto(
+        conteudo=relatorio_ia,
+        bucket_name=bucket,
+        object_name=chave_relatorio,
+        metadata={"equipamento": "router-borda-sp01", "severidade": "critica"},
+        content_type="application/json"
+    )
+    aws.enviar_conteudo_texto(
+        conteudo="Nov 16 17:10:01 router-borda-sp01 bgpd[1024]: Neighbor 10.0.0.2 Down",
+        bucket_name=bucket,
+        object_name=chave_log
+    )
+
+    print("\n--- 2. TESTE DE VERIFICAÃ‡ÃƒO DE EXISTÃŠNCIA (HEAD) ---")
+    print(f"RelatÃ³rio existe? {aws.arquivo_existe(bucket, chave_relatorio)}")
+    print(f"Arquivo fantasma existe? {aws.arquivo_existe(bucket, 'relatorios/nao_existe.json')}")
+
+    print("\n--- 3. TESTE DE LISTAGEM FILTRADA POR PREFIXO ---")
+    print("Apenas relatÃ³rios:", aws.listar_arquivos(bucket, prefixo="relatorios/"))
+    print("Apenas logs:", aws.listar_arquivos(bucket, prefixo="logs/"))
+
+    print("\n--- 4. TESTE DE METADADOS E TAGS DINÃ‚MICAS ---")
+    print("Metadados gravados:", aws.obter_metadados(bucket, chave_relatorio))
+
+    aws.definir_tags(bucket, chave_relatorio, {"status": "pendente_revisao", "turno": "noite"})
+    print("Tags lidas:", aws.obter_tags(bucket, chave_relatorio))
+
+    print("\n--- 5. TESTE DE LEITURA DIRETO PARA A MEMÃ“RIA ---")
+    conteudo_lido = aws.ler_conteudo_texto(bucket, chave_relatorio)
+    print(f"ConteÃºdo recuperado do S3:\n{conteudo_lido}")
+
+    # Limpeza final dos objetos de teste
+    aws.deletar_arquivo(bucket, chave_relatorio)
+    aws.deletar_arquivo(bucket, chave_log)
+
+
+if __name__ == "__main__":
+    testar_evolucoes_s3()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_aws_16_11_26_pt2.py ===
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.cloud.aws_client import AWSManager
+
+
+def testar_dynamodb():
+    aws = AWSManager()
+    tabela = "net-ai-incidentes"
+
+    print("\n--- 1. CRIANDO TABELA NO DYNAMODB ---")
+    aws.criar_tabela_incidentes(tabela)
+
+    print("\n--- 2. REGISTRANDO INCIDENTE ---")
+    aws.registrar_incidente(
+        table_name=tabela,
+        incidente_id="INC-2026-001",
+        equipamento="router-borda-sp01",
+        severidade="CRITICA",
+        diagnostico_ia="Queda de sessÃ£o BGP por erro de MTU na interface eth0",
+        s3_key="relatorios/2026-11/incidente_001.json",
+        status="ANALISADO"
+    )
+
+    print("\n--- 3. BUSCANDO INCIDENTE ---")
+    dados = aws.buscar_incidente(tabela, "INC-2026-001")
+    print("Dados recuperados:", dados)
+
+    print("\n--- 4. ATUALIZANDO STATUS APÃ“S REMEDIAÃ‡ÃƒO ---")
+    aws.atualizar_status_incidente(tabela, "INC-2026-001", "REMEDIADO")
+    dados_atualizados = aws.buscar_incidente(tabela, "INC-2026-001")
+    print("Status atualizado:", dados_atualizados["status"] if dados_atualizados else "Erro")
+
+
+if __name__ == "__main__":
+    testar_dynamodb()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_aws_secrets.py ===
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.cloud.aws_client import AWSManager
+
+
+def testar_secrets_manager():
+    aws = AWSManager()
+    nome_cofre = "net-ai/roteadores/mikrotik-borda"
+
+    print("\n--- 1. GUARDANDO CREDENCIAIS NO COFRE ---")
+    credenciais_iniciais = {
+        "host": "192.168.88.1",
+        "usuario": "admin_netai",
+        "senha": "SenhaSuperSecreta@2026!",
+        "porta_ssh": "22"
+    }
+    aws.criar_segredo(
+        nome_segredo=nome_cofre,
+        segredo_dict=credenciais_iniciais,
+        descricao="Credenciais de acesso SSH do roteador MikroTik de borda"
+    )
+
+    print("\n--- 2. RECUPERANDO CREDENCIAIS DO COFRE ---")
+    dados_recuperados = aws.buscar_segredo(nome_cofre)
+    if dados_recuperados:
+        print(f"Host: {dados_recuperados['host']} | UsuÃ¡rio: {dados_recuperados['usuario']} | Senha: {dados_recuperados['senha']}")
+
+    print("\n--- 3. ROTACIONANDO (ATUALIZANDO) A SENHA ---")
+    credenciais_novas = credenciais_iniciais.copy()
+    credenciais_novas["senha"] = aws.gerar_senha_forte(24)
+    aws.atualizar_segredo(nome_cofre, credenciais_novas)
+
+    dados_novos = aws.buscar_segredo(nome_cofre)
+    if dados_novos:
+        print(f"Senha atualizada lida do cofre: {dados_novos['senha']}")
+
+
+if __name__ == "__main__":
+    testar_secrets_manager()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_aws_sns.py ===
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.cloud.aws_client import AWSManager
+
+
+def testar_sns():
+    aws = AWSManager()
+
+    print("\n--- 1. CRIANDO TÃ“PICO DE ALERTAS CRÃTICOS ---")
+    topic_arn = aws.criar_topico_alertas("net-ai-alertas-criticos")
+    if not topic_arn:
+        return
+
+    print("\n--- 2. INSCREVENDO E-MAIL DA EQUIPE DE REDES (NOC) ---")
+    aws.inscrever_alerta(
+        topic_arn=topic_arn,
+        protocolo="email",
+        endpoint="noc-engenharia@empresa.com.br"
+    )
+
+    print("\n--- 3. DISPARANDO ALERTA DE INCIDENTE CRÃTICO ---")
+    corpo_alerta = (
+        "INCIDENTE DETECTADO PELO NET-AI REMEDIATOR\n"
+        "Equipamento: router-borda-sp01 (10.0.0.1)\n"
+        "Severidade: CRITICA\n"
+        "DiagnÃ³stico IA: Queda de sessÃ£o BGP por erro de MTU na interface eth0.\n"
+        "RelatÃ³rio completo (S3 Presigned URL): http://localhost:4566/net-ai-bucket/relatorios/incidente_001.json"
+    )
+
+    msg_id = aws.disparar_alerta_critico(
+        topic_arn=topic_arn,
+        assunto="[CRÃTICO] Falha BGP detectada em router-borda-sp01",
+        mensagem=corpo_alerta
+    )
+    print(f"NotificaÃ§Ã£o enviada com sucesso! ID da Mensagem: {msg_id}")
+
+
+if __name__ == "__main__":
+    testar_sns()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_aws_sqs.py ===
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.cloud.aws_client import AWSManager
+
+
+def testar_sqs():
+    aws = AWSManager()
+
+    print("\n--- 1. CRIANDO A FILA DE ALERTAS ---")
+    url_fila = aws.criar_fila("net-ai-alertas-queue")
+    if not url_fila:
+        return
+
+    print("\n--- 2. SIMULANDO 2 ROTEADORES ENVIANDO FALHAS PARA A FILA ---")
+    alerta_1 = {
+        "equipamento": "router-borda-sp01",
+        "ip": "10.0.0.1",
+        "erro": "BGP Neighbor 10.0.0.2 Down",
+        "severidade": "CRITICA"
+    }
+    alerta_2 = {
+        "equipamento": "switch-core-rj01",
+        "ip": "10.0.1.5",
+        "erro": "Alta utilizacao de CPU (94%)",
+        "severidade": "ALTA"
+    }
+
+    aws.enviar_alerta_fila(url_fila, alerta_1)
+    aws.enviar_alerta_fila(url_fila, alerta_2)
+
+    print("\n--- 3. CONSUMINDO ALERTAS DA FILA (COMO A IA FARIA) ---")
+    alertas_recebidos = aws.consumir_alertas_fila(url_fila, max_mensagens=5)
+    for idx, alerta in enumerate(alertas_recebidos, start=1):
+        print(f"Ticket #{idx}: [{alerta['severidade']}] {alerta['equipamento']} -> {alerta['erro']}")
+
+    print("\n--- 4. VERIFICANDO SE A FILA FICOU VAZIA APÃ“S CONSUMO ---")
+    restantes = aws.consumir_alertas_fila(url_fila)
+    print(f"Mensagens restantes na fila: {len(restantes)}")
+
+
+if __name__ == "__main__":
+    testar_sqs()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_driver.py ===
+from src.network.drivers import SimuladorRoteadorDriver
+
+def testar_driver_simulado():
+    print("--- INICIANDO TESTE DO DRIVER DE REDE ---")
+    
+    # Instancia o driver simulado
+    driver = SimuladorRoteadorDriver("router-borda-sp01")
+    
+    # Testa a coleta de log
+    log = driver.coletar_logs_recentes()
+    print(f"\n[LOG CAPTURADO]:\n{log}\n")
+    
+    # Testa a aplicaÃ§Ã£o de remediaÃ§Ã£o segura
+    comando_ia = "clear ip bgp 10.255.0.2 soft"
+    sucesso = driver.aplicar_remediacao(comando_ia)
+    
+    assert sucesso == True, "A remediaÃ§Ã£o deveria ter retornado True"
+    print("\n--- TESTE DO DRIVER CONCLUÃDO COM SUCESSO! ---")
+
+if __name__ == "__main__":
+    testar_driver_simulado()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_driver_factory.py ===
+import sys
+import os
+
+# Adiciona a raiz do projeto no path para o Python encontrar a src
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from src.network.drivers import NetworkDriverFactory
+
+def testar_resiliencia_e_factory():
+    print("--- INICIANDO TESTE DE RESILIÃŠNCIA E FACTORY ---\n")
+    
+    # 1. Testando o Driver Simulado (continua funcionando 100%)
+    print("[TESTE 1] Validando Driver Simulado:")
+    driver_sim = NetworkDriverFactory.criar_driver("simulador", nome_equipamento="router-borda-sp01")
+    logs = driver_sim.coletar_logs_recentes()
+    print(f"Log capturado: {logs}")
+    driver_sim.aplicar_remediacao("clear ip bgp 10.255.0.2 soft")
+    
+    print("\n--------------------------------------------------\n")
+    
+    # 2. Testando a criaÃ§Ã£o do Driver Netmiko (Pilar 2 - com parÃ¢metros de retry)
+    print("[TESTE 2] Validando InstanciaÃ§Ã£o do Driver Netmiko Resiliente:")
+    try:
+        driver_netmiko = NetworkDriverFactory.criar_driver(
+            "netmiko", 
+            device_type="cisco_ios", 
+            ip="192.168.255.255", # IP fictÃ­cio proposital para testar timeout/retry
+            username="admin", 
+            secret="cisco123",
+            max_retries=2        # Testa 2 tentativas antes de estourar erro
+        )
+        print("Driver Netmiko instanciado com sucesso. Tentando conectar (vai gerar timeout esperado)...")
+        driver_netmiko.coletar_logs_recentes()
+    except Exception as e:
+        print(f"[SUCESSO NO TRATAMENTO] A exceÃ§Ã£o de rede foi capturada corretamente pelo Pilar 2: {type(e).__name__} - {e}")
+
+if __name__ == "__main__":
+    testar_resiliencia_e_factory()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\tests\teste_parser2.py ===
+import sys
+import os
+
+# Garante que o Python encontre a pasta src
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from src.network.parser import NetworkParser
+
+def testar_parser():
+    print("--- INICIANDO TESTE DO PARSER (TEXTFSM COM ARQUIVO) ---")
+    
+    # SaÃ­da bruta simulada do BGP
+    raw_output = """
+10.255.0.1        4      65000       120       140         0         0         0      0
+10.255.0.2        4      65001       250       300         0         0         0     10
+    """
+    
+    # Caminho para o arquivo de template TextFSM
+    template_path = os.path.join(os.path.dirname(__file__), '../src/network/templates/bgp_summary.template')
+    
+    print(f"Lendo template do arquivo: {template_path}")
+    resultado = NetworkParser.parsear_arquivo(template_path, raw_output)
+    
+    print("\n[RESULTADO CONVERTIDO EM JSON/DICIONÃRIO]:")
+    if resultado:
+        for item in resultado:
+            print(item)
+    else:
+        print("Nenhum registro encontrado. Verifique o template.")
+        
+    print("\n--- TESTE DO PARSER FINALIZADO COM SUCESSO ---")
+
+if __name__ == "__main__":
+    testar_parser()
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\main.py ===
+
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\requirements.txt ===
+netmiko>=4.3.0
+pyyaml>=6.0
+boto3>=1.34.0
+textfsm>=1.1.2
+
+=== ARQUIVO: C:\Users\prado\net-ai-remediator\dockerfile ===
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["python", "-m", "tests.teste_driver"]
