@@ -1,68 +1,82 @@
+import json
 import logging
+import os
+import secrets
+import string
 from typing import Any, Dict, List, Optional
+
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
-import json
-import secrets
-import string
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente de um arquivo .env na raiz do projeto (se existir).
+# Não sobrescreve variáveis já definidas no ambiente do sistema operacional ou container.
+load_dotenv()
 
 logger = logging.getLogger("AWSManager")
 
 
 class AWSManager:
-    def __init__(self, endpoint_url: str = "http://localhost:4566", region_name: str = "us-east-1"):
-        self.endpoint_url = endpoint_url
-        self.region_name = region_name
-        
-        self.aws_access_key_id = "test"
-        self.aws_secret_access_key = "test"
+    def __init__(
+        self,
+        endpoint_url: Optional[str] = None,
+        region_name: Optional[str] = None,
+    ):
+        # Define o ambiente da aplicação (ex.: "local" para LocalStack, "lab" ou "prod" para AWS real).
+        self.app_env = os.getenv("APP_ENV", "local").strip().lower()
 
-        # Força path-style para evitar erros de DNS local no Windows com LocalStack
+        # Prioriza argumento explícito se passado; senão lê do ambiente (.env / OS) com fallback seguro.
+        self.region_name = (
+            region_name
+            or os.getenv("AWS_REGION")
+            or os.getenv("AWS_DEFAULT_REGION")
+            or "us-east-1"
+        )
+
+        # Em ambiente "local", usa endpoint_url explícito, AWS_ENDPOINT_URL do .env,
+        # ou monta via LOCALSTACK_HOST (padrão http://localhost:4566).
+        # Em outros ambientes (ex.: "lab" / "prod"), deixa None para usar o endpoint padrão da AWS.
+        if self.app_env == "local":
+            localstack_host = os.getenv("LOCALSTACK_HOST", "localhost")
+            self.endpoint_url = (
+                endpoint_url
+                or os.getenv("AWS_ENDPOINT_URL")
+                or f"http://{localstack_host}:4566"
+            )
+            self.aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID") or "test"
+            self.aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY") or "test"
+        else:
+            self.endpoint_url = endpoint_url or os.getenv("AWS_ENDPOINT_URL")
+            self.aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+            self.aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+        # Parâmetros base do boto3: credenciais só entram se estiverem configuradas,
+        # permitindo que em lab/prod o boto3 use IAM Role / profile / variáveis padrão da AWS.
+        client_kwargs: Dict[str, Any] = {
+            "region_name": self.region_name,
+        }
+        if self.endpoint_url:
+            client_kwargs["endpoint_url"] = self.endpoint_url
+        if self.aws_access_key_id and self.aws_secret_access_key:
+            client_kwargs["aws_access_key_id"] = self.aws_access_key_id
+            client_kwargs["aws_secret_access_key"] = self.aws_secret_access_key
+
+        # Força path-style para evitar erros de DNS local no Windows com LocalStack.
         config_s3 = Config(
-            s3={'addressing_style': 'path'},
-            retries={'max_attempts': 3, 'mode': 'standard'}
+            s3={"addressing_style": "path"},
+            retries={"max_attempts": 3, "mode": "standard"},
         )
 
-        self.s3_client = boto3.client(
-            's3',
-            endpoint_url=self.endpoint_url,
-            region_name=self.region_name,
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key,
-            config=config_s3
-        )
+        self.s3_client = boto3.client("s3", config=config_s3, **client_kwargs)
+        self.dynamodb_client = boto3.client("dynamodb", **client_kwargs)
+        self.secrets_client = boto3.client("secretsmanager", **client_kwargs)
+        self.sqs_client = boto3.client("sqs", **client_kwargs)
+        self.sns_client = boto3.client("sns", **client_kwargs)
 
-        self.dynamodb_client = boto3.client(
-            'dynamodb',
-            endpoint_url=self.endpoint_url,
-            region_name=self.region_name,
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key
-        )
-
-        self.secrets_client = boto3.client(
-            'secretsmanager',
-            endpoint_url=self.endpoint_url,
-            region_name=self.region_name,
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key
-        )
-
-        self.sqs_client = boto3.client(
-            'sqs',
-            endpoint_url=self.endpoint_url,
-            region_name=self.region_name,
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key
-        )
-
-        self.sns_client = boto3.client(
-            'sns',
-            endpoint_url=self.endpoint_url,
-            region_name=self.region_name,
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key
+        logger.info(
+            f"AWSManager inicializado | env={self.app_env} | region={self.region_name} | "
+            f"endpoint={self.endpoint_url or 'AWS_DEFAULT'}"
         )
 
     # =========================================================================
@@ -86,7 +100,7 @@ class AWSManager:
         """Retorna e registra todos os buckets disponíveis."""
         try:
             response = self.s3_client.list_buckets()
-            buckets = [b['Name'] for b in response.get('Buckets', [])]
+            buckets = [b["Name"] for b in response.get("Buckets", [])]
             logger.info(f"Buckets encontrados ({len(buckets)}): {buckets}")
             return buckets
         except Exception as e:
@@ -98,15 +112,15 @@ class AWSManager:
         file_name: str,
         bucket_name: str,
         object_name: Optional[str] = None,
-        metadata: Optional[Dict[str, str]] = None
+        metadata: Optional[Dict[str, str]] = None,
     ) -> bool:
         """Faz upload de um arquivo físico do disco para o S3, com suporte a metadados."""
         if object_name is None:
             object_name = file_name
 
-        extra_args = {}
+        extra_args: Dict[str, Any] = {}
         if metadata:
-            extra_args['Metadata'] = metadata
+            extra_args["Metadata"] = metadata
 
         try:
             self.s3_client.upload_file(file_name, bucket_name, object_name, ExtraArgs=extra_args)
@@ -140,9 +154,9 @@ class AWSManager:
         """Gera uma URL temporária e assinada para acesso seguro a um objeto privado."""
         try:
             url = self.s3_client.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': bucket_name, 'Key': object_name},
-                ExpiresIn=expiration
+                "get_object",
+                Params={"Bucket": bucket_name, "Key": object_name},
+                ExpiresIn=expiration,
             )
             logger.info(f"URL pré-assinada gerada para '{object_name}' (validade: {expiration}s).")
             return url
@@ -160,15 +174,15 @@ class AWSManager:
         bucket_name: str,
         object_name: str,
         metadata: Optional[Dict[str, str]] = None,
-        content_type: str = "text/plain; charset=utf-8"
+        content_type: str = "text/plain; charset=utf-8",
     ) -> bool:
         """Envia uma string (logs, JSON, relatórios da IA) direto da memória RAM para o S3."""
         try:
-            kwargs = {
+            kwargs: Dict[str, Any] = {
                 "Bucket": bucket_name,
                 "Key": object_name,
                 "Body": conteudo.encode("utf-8"),
-                "ContentType": content_type
+                "ContentType": content_type,
             }
             if metadata:
                 kwargs["Metadata"] = metadata
@@ -232,7 +246,7 @@ class AWSManager:
             self.s3_client.put_object_tagging(
                 Bucket=bucket_name,
                 Key=object_name,
-                Tagging={"TagSet": tag_set}
+                Tagging={"TagSet": tag_set},
             )
             logger.info(f"Tags aplicadas em '{object_name}': {tags}")
             return True
@@ -249,7 +263,7 @@ class AWSManager:
             logger.error(f"Erro ao ler tags de '{object_name}': {e}")
             return {}
 
-# =========================================================================
+    # =========================================================================
     # OPERAÇÕES DYNAMODB: HISTÓRICO ESTRUTURADO DE INCIDENTES
     # =========================================================================
 
@@ -259,17 +273,17 @@ class AWSManager:
             self.dynamodb_client.create_table(
                 TableName=table_name,
                 KeySchema=[
-                    {'AttributeName': 'incidente_id', 'KeyType': 'HASH'}  # Partition Key
+                    {"AttributeName": "incidente_id", "KeyType": "HASH"},  # Partition Key
                 ],
                 AttributeDefinitions=[
-                    {'AttributeName': 'incidente_id', 'AttributeType': 'S'}  # String
+                    {"AttributeName": "incidente_id", "AttributeType": "S"},  # String
                 ],
-                BillingMode='PAY_PER_REQUEST'
+                BillingMode="PAY_PER_REQUEST",
             )
             logger.info(f"Tabela DynamoDB '{table_name}' criada com sucesso.")
             return True
         except ClientError as e:
-            if e.response['Error']['Code'] == 'ResourceInUseException':
+            if e.response["Error"]["Code"] == "ResourceInUseException":
                 logger.info(f"Tabela DynamoDB '{table_name}' já existe.")
                 return True
             logger.error(f"Erro AWS ao criar tabela '{table_name}': {e.response['Error']['Message']}")
@@ -286,20 +300,20 @@ class AWSManager:
         severidade: str,
         diagnostico_ia: str,
         s3_key: str,
-        status: str = "PENDENTE"
+        status: str = "PENDENTE",
     ) -> bool:
         """Insere um novo registro estruturado de incidente no DynamoDB."""
         try:
             self.dynamodb_client.put_item(
                 TableName=table_name,
                 Item={
-                    'incidente_id': {'S': incidente_id},
-                    'equipamento': {'S': equipamento},
-                    'severidade': {'S': severidade},
-                    'diagnostico_ia': {'S': diagnostico_ia},
-                    's3_key': {'S': s3_key},
-                    'status': {'S': status}
-                }
+                    "incidente_id": {"S": incidente_id},
+                    "equipamento": {"S": equipamento},
+                    "severidade": {"S": severidade},
+                    "diagnostico_ia": {"S": diagnostico_ia},
+                    "s3_key": {"S": s3_key},
+                    "status": {"S": status},
+                },
             )
             logger.info(f"Incidente '{incidente_id}' registrado no DynamoDB (equipamento: {equipamento}).")
             return True
@@ -312,9 +326,9 @@ class AWSManager:
         try:
             response = self.dynamodb_client.get_item(
                 TableName=table_name,
-                Key={'incidente_id': {'S': incidente_id}}
+                Key={"incidente_id": {"S": incidente_id}},
             )
-            item = response.get('Item')
+            item = response.get("Item")
             if not item:
                 logger.warning(f"Incidente '{incidente_id}' não encontrado na tabela '{table_name}'.")
                 return None
@@ -332,10 +346,10 @@ class AWSManager:
         try:
             self.dynamodb_client.update_item(
                 TableName=table_name,
-                Key={'incidente_id': {'S': incidente_id}},
+                Key={"incidente_id": {"S": incidente_id}},
                 UpdateExpression="SET #st = :val",
-                ExpressionAttributeNames={'#st': 'status'},  # 'status' é palavra reservada no DynamoDB
-                ExpressionAttributeValues={':val': {'S': novo_status}}
+                ExpressionAttributeNames={"#st": "status"},  # 'status' é palavra reservada no DynamoDB
+                ExpressionAttributeValues={":val": {"S": novo_status}},
             )
             logger.info(f"Status do incidente '{incidente_id}' atualizado para '{novo_status}'.")
             return True
@@ -353,12 +367,12 @@ class AWSManager:
             self.secrets_client.create_secret(
                 Name=nome_segredo,
                 Description=descricao,
-                SecretString=json.dumps(segredo_dict)
+                SecretString=json.dumps(segredo_dict),
             )
             logger.info(f"Segredo '{nome_segredo}' guardado com sucesso no cofre.")
             return True
         except ClientError as e:
-            if e.response['Error']['Code'] == 'ResourceExistsException':
+            if e.response["Error"]["Code"] == "ResourceExistsException":
                 logger.warning(f"Segredo '{nome_segredo}' já existe no cofre.")
                 return False
             logger.error(f"Erro AWS ao criar segredo '{nome_segredo}': {e.response['Error']['Message']}")
@@ -371,7 +385,7 @@ class AWSManager:
         """Recupera um segredo do cofre e o converte de volta para dicionário Python."""
         try:
             response = self.secrets_client.get_secret_value(SecretId=nome_segredo)
-            segredo_str = response.get('SecretString')
+            segredo_str = response.get("SecretString")
             if not segredo_str:
                 return None
 
@@ -389,7 +403,7 @@ class AWSManager:
         try:
             self.secrets_client.put_secret_value(
                 SecretId=nome_segredo,
-                SecretString=json.dumps(novos_dados_dict)
+                SecretString=json.dumps(novos_dados_dict),
             )
             logger.info(f"Segredo '{nome_segredo}' atualizado com sucesso.")
             return True
@@ -400,10 +414,9 @@ class AWSManager:
     def gerar_senha_forte(self, tamanho: int = 20) -> str:
         """Gera uma senha aleatória criptograficamente segura (letras, números e símbolos)."""
         alfabeto = string.ascii_letters + string.digits + "!@#$%&*-_=+"
-        senha = ''.join(secrets.choice(alfabeto) for _ in range(tamanho))
+        senha = "".join(secrets.choice(alfabeto) for _ in range(tamanho))
         logger.info(f"Nova senha segura gerada ({tamanho} caracteres).")
         return senha
-
 
     # =========================================================================
     # OPERAÇÕES SQS: FILA DE ALERTAS DE REDE
@@ -413,27 +426,25 @@ class AWSManager:
         """Cria uma fila no SQS e retorna a URL dela."""
         try:
             response = self.sqs_client.create_queue(QueueName=nome_fila)
-            queue_url = response.get('QueueUrl')
+            queue_url = response.get("QueueUrl")
             logger.info(f"Fila SQS '{nome_fila}' pronta. URL: {queue_url}")
             return queue_url
         except Exception as e:
             logger.error(f"Erro ao criar fila SQS '{nome_fila}': {e}")
             return None
 
-
     def enviar_alerta_fila(self, queue_url: str, evento_dict: Dict[str, Any]) -> bool:
         """Envia um evento de rede (dicionário convertido em JSON) para a fila."""
         try:
             self.sqs_client.send_message(
                 QueueUrl=queue_url,
-                MessageBody=json.dumps(evento_dict)
+                MessageBody=json.dumps(evento_dict),
             )
             logger.info(f"Alerta do equipamento '{evento_dict.get('equipamento')}' enviado para a fila.")
             return True
         except Exception as e:
             logger.error(f"Erro ao enviar mensagem para a fila SQS: {e}")
             return False
-        
 
     def consumir_alertas_fila(self, queue_url: str, max_mensagens: int = 5) -> List[Dict[str, Any]]:
         """Lê os alertas pendentes na fila, converte de volta para dict e apaga da fila."""
@@ -442,22 +453,22 @@ class AWSManager:
             response = self.sqs_client.receive_message(
                 QueueUrl=queue_url,
                 MaxNumberOfMessages=max_mensagens,
-                WaitTimeSeconds=2  # Long Polling: espera até 2s se a fila estiver vazia
+                WaitTimeSeconds=2,  # Long Polling: espera até 2s se a fila estiver vazia
             )
 
-            mensagens = response.get('Messages', [])
+            mensagens = response.get("Messages", [])
             if not mensagens:
                 logger.info("Nenhum alerta pendente na fila SQS.")
                 return []
 
             for msg in mensagens:
-                corpo_dict = json.loads(msg['Body'])
+                corpo_dict = json.loads(msg["Body"])
                 eventos_processados.append(corpo_dict)
 
                 # Confirma o recebimento apagando a mensagem da fila pelo ReceiptHandle
                 self.sqs_client.delete_message(
                     QueueUrl=queue_url,
-                    ReceiptHandle=msg['ReceiptHandle']
+                    ReceiptHandle=msg["ReceiptHandle"],
                 )
 
             logger.info(f"{len(eventos_processados)} alerta(s) consumido(s) e removido(s) da fila.")
@@ -474,7 +485,7 @@ class AWSManager:
         """Cria um canal (Tópico) no SNS para alertas críticos e retorna o TopicArn."""
         try:
             response = self.sns_client.create_topic(Name=nome_topico)
-            topic_arn = response.get('TopicArn')
+            topic_arn = response.get("TopicArn")
             logger.info(f"Tópico SNS '{nome_topico}' pronto. ARN: {topic_arn}")
             return topic_arn
         except Exception as e:
@@ -487,9 +498,9 @@ class AWSManager:
             response = self.sns_client.subscribe(
                 TopicArn=topic_arn,
                 Protocol=protocolo,
-                Endpoint=endpoint
+                Endpoint=endpoint,
             )
-            sub_arn = response.get('SubscriptionArn')
+            sub_arn = response.get("SubscriptionArn")
             logger.info(f"Inscrição realizada no tópico ({protocolo} -> {endpoint}).")
             return sub_arn
         except Exception as e:
@@ -502,9 +513,9 @@ class AWSManager:
             response = self.sns_client.publish(
                 TopicArn=topic_arn,
                 Subject=assunto[:100],  # A AWS limita o assunto de e-mail SNS a 100 caracteres
-                Message=mensagem
+                Message=mensagem,
             )
-            msg_id = response.get('MessageId')
+            msg_id = response.get("MessageId")
             logger.info(f"Alerta crítico disparado via SNS! MessageId: {msg_id}")
             return msg_id
         except Exception as e:

@@ -1,16 +1,16 @@
-import time
+import ipaddress
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Optional
 
 try:
-    from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
+    from netmiko import ConnectHandler, NetmikoAuthenticationException, NetmikoTimeoutException
     NETMIKO_DISPONIVEL = True
 except ImportError:
     NETMIKO_DISPONIVEL = False
 
 logger = logging.getLogger("NetworkDriver")
-
 
 
 class NetworkDriverInterface(ABC):
@@ -38,27 +38,80 @@ class SimuladorRoteadorDriver(NetworkDriverInterface):
 
 class NetmikoRouterDriver(NetworkDriverInterface):
     """
-    Driver de Produção/Laboratório real com resiliência, retry e tratamento avançado de erros (Pilar 1 e 2).
+    Driver de Produção/Laboratório real com resiliência, retry, isolamento de rede
+    de gerência e busca de credenciais via AWS Secrets Manager.
     """
 
-    def __init__(self, device_type: str, ip: str, username: str, secret: str, port: int = 22, max_retries: int = 3, retry_delay: int = 2):
+    def __init__(
+        self,
+        device_type: str,
+        ip: str,
+        username: Optional[str] = None,
+        secret: Optional[str] = None,
+        port: int = 22,
+        max_retries: int = 3,
+        retry_delay: int = 2,
+        secret_name: Optional[str] = None,
+        aws_manager=None,
+        rede_gerencia_cidr: Optional[str] = "10.255.255.0/24",
+    ):
         if not NETMIKO_DISPONIVEL:
             raise ImportError("A biblioteca 'netmiko' não está instalada. Execute: pip install netmiko")
-        
+
+        # 1. Valida isolamento de rede (rede de gerência dedicada / OOB) quando informado.
+        if rede_gerencia_cidr:
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+                rede_obj = ipaddress.ip_network(rede_gerencia_cidr, strict=False)
+            except ValueError as exc:
+                raise ValueError(
+                    f"IP de destino ('{ip}') ou CIDR de gerência ('{rede_gerencia_cidr}') inválido."
+                ) from exc
+
+            if ip_obj not in rede_obj:
+                raise ValueError(
+                    f"Bloqueio de segurança: IP {ip} fora da rede de gerência dedicada ({rede_gerencia_cidr})."
+                )
+
+        # 2. Obtém credenciais do AWS Secrets Manager (quando secret_name e aws_manager forem fornecidos)
+        # ou usa os parâmetros explícitos (username/secret) mantendo compatibilidade.
+        usuario_final = username
+        senha_final = secret
+        enable_secret_final = secret
+
+        if secret_name and aws_manager is not None:
+            credenciais = aws_manager.buscar_segredo(secret_name)
+            if not credenciais:
+                raise RuntimeError(f"Credenciais '{secret_name}' não encontradas no Secrets Manager.")
+            usuario_final = credenciais.get("username") or usuario_final
+            senha_final = credenciais.get("password") or senha_final
+            enable_secret_final = credenciais.get("enable_secret") or senha_final
+
+        if not usuario_final or not senha_final:
+            raise ValueError(
+                "Credenciais SSH não informadas. Forneça 'username' e 'secret' ou 'secret_name' + 'aws_manager'."
+            )
+
+        # Nota de privilégio mínimo: o usuário SSH configurado no roteador deve possuir
+        # apenas o nível de privilégio necessário para os comandos de diagnóstico/remediação.
         self.device_config = {
-            'device_type': device_type,
-            'host': ip,
-            'username': username,
-            'password': secret,
-            'secret': secret,
-            'port': port,
-            'timeout': 10,
-            'session_timeout': 15
+            "device_type": device_type,
+            "host": ip,
+            "username": usuario_final,
+            "password": senha_final,
+            "secret": enable_secret_final,
+            "port": port,
+            "timeout": 10,
+            "session_timeout": 15,
         }
         self.ip = ip
+        self.rede_gerencia_cidr = rede_gerencia_cidr
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        logger.info(f"Driver Netmiko resiliente configurado para o host: {self.ip} (Max retries: {max_retries})")
+        logger.info(
+            f"Driver Netmiko resiliente configurado para o host: {self.ip} "
+            f"(gerência: {self.rede_gerencia_cidr or 'sem restrição CIDR'}, Max retries: {max_retries})"
+        )
 
     def _executar_com_retry(self, func, *args, **kwargs):
         """Executa uma operação com novas tentativas e intervalo crescente (backoff)."""
@@ -99,14 +152,22 @@ class NetmikoRouterDriver(NetworkDriverInterface):
         def _acao():
             with ConnectHandler(**self.device_config) as conn:
                 return conn.send_command("show ip bgp summary")
-        
+
         logger.info(f"Iniciando coleta com política de resiliência em {self.ip}...")
         return self._executar_com_retry(_acao)
 
     def aplicar_remediacao(self, comando: str) -> bool:
         def _acao():
             with ConnectHandler(**self.device_config) as conn:
-                conn.enable()
+                # Chama enable() apenas se houver enable_secret configurado; se o usuário já
+                # entrar direto com privilégio mínimo suficiente no EXEC, evita falha desnecessária.
+                if self.device_config.get("secret"):
+                    try:
+                        conn.enable()
+                    except Exception:
+                        logger.debug(
+                            f"[{self.ip}] conn.enable() não necessário ou não aplicável ao nível de privilégio atual."
+                        )
                 output = conn.send_config_set([comando]) if "config" in comando.lower() else conn.send_command(comando)
                 logger.info(f"Comando aplicado com sucesso em {self.ip}. Saída:\n{output}")
                 return True
@@ -132,7 +193,11 @@ class NetworkDriverFactory:
                 username=kwargs.get("username"),
                 secret=kwargs.get("secret"),
                 port=kwargs.get("port", 22),
-                max_retries=kwargs.get("max_retries", 3)
+                max_retries=kwargs.get("max_retries", 3),
+                retry_delay=kwargs.get("retry_delay", 2),
+                secret_name=kwargs.get("secret_name"),
+                aws_manager=kwargs.get("aws_manager"),
+                rede_gerencia_cidr=kwargs.get("rede_gerencia_cidr", "10.255.255.0/24"),
             )
         else:
             raise ValueError(f"Tipo de driver desconhecido: '{tipo}'.")

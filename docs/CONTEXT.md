@@ -13,7 +13,7 @@ Desenvolver uma ferramenta aut√¥noma de monitoramento, diagn√≥stico e remedia√ß√
 - **Design Patterns:**
   * **Factory Pattern (`src/network`):** Instancia drivers de conex√£o (SSH/API) dinamicamente por fabricante (FRR, MikroTik, etc.).
   * **Strategy Pattern (`src/ai`):** Permite alternar o motor de IA (Ollama local, APIs externas, etc.) sem alterar o restante do c√≥digo.
-- **√Årvore de Diret√≥rios Criada (`~/net-ai-remediator`):**
+- **√ùrvore de Diret√≥rios Criada (`~/net-ai-remediator`):**
   ```text
   net-ai-remediator/
   ‚îú‚îÄ‚îÄ docs/               # Documenta√ß√£o e CONTEXT.md (Save Game do projeto)
@@ -228,8 +228,12 @@ Hoje focamos na robustez, seguran√ßa e intelig√™ncia do motor de IA (`AIAnalyzer
 **Data da √öltima Atualiza√ß√£o:** 22 de Novembro de 2026
 **Status do Projeto:** Pipeline Principal Integrado com LocalStack, Ollama (`llama3`) e Sincroniza√ß√£o de Estado no DynamoDB
 
-## 1. Entregas Consolidadas
-* **Configura√ß√£o Centralizada (`src/core/config.py`):** Cria√ß√£o de `AppConfig` (`@dataclass(frozen=True)`) com leitura via `os.getenv` para LocalStack, regi√£o AWS, nomes de bucket/tabela/fila/t√≥pico e par√¢metros do Ollama.
-* **Padroniza√ß√£o de Logging (`src/cloud/aws_client.py`):** Remo√ß√£o do `logging.basicConfig(...)` do m√≥dulo para que o ponto de entrada (`main.py`) controle a configura√ß√£o global de logs.
-* **Orquestra√ß√£o Ponta a Ponta (`main.py`):** Integra√ß√£o de `NetworkDriverFactory`, `IncidenteRede`, `DiagnosticoIA`, `NetworkAIAnalyzer` e `AWSManager` (S3, DynamoDB, SQS, SNS), com log expl√≠cito quando o SNS n√£o √© acionado para severidades fora de `ALTA`/`CRITICA`.
-* **Sincroniza√ß√£o de Estado P√≥s-Remedia√ß√£o:** Atualiza√ß√£o do status do incidente no DynamoDB para `REMEDIADO` ap√≥s `driver.aplicar_remediacao(...)` retornar `True`.
+ConfiguraÁ„o centralizada (src/core/config.py): ImplementaÁ„o da AppConfig (@dataclass(frozen=True)) lendo vari·veis de ambiente (LOCALSTACK_HOST, AWS_DEFAULT_REGION, OLLAMA_MODEL, OLLAMA_URL), definindo padrıes para bucket S3, tabela DynamoDB, fila SQS e tÛpico SNS, e expondo localstack_endpoint.
+
+Modelos de domÌnio (src/core/models.py): FormalizaÁ„o das estruturas IncidenteRede e DiagnosticoIA com @dataclass.
+
+PadronizaÁ„o de logging (src/cloud/aws_client.py): RemoÁ„o do logging.basicConfig(...) do mÛdulo para centralizar a configuraÁ„o de logs no ponto de entrada (main.py).
+
+OrquestraÁ„o e sincronizaÁ„o de estado (main.py): IntegraÁ„o do fluxo com driver via factory, modelos, NetworkAIAnalyzer e AWSManager (S3, DynamoDB, SQS, SNS), incluindo log quando o SNS n„o dispara fora de severidades ALTA ou CRITICA e atualizaÁ„o do status do incidente no DynamoDB para REMEDIADO quando aplicar_remediacao(...) retorna True.
+
+Ajustes de rede, IA e higiene de Git: Refinamentos em src/ai/analyzer.py e src/network/drivers.py, atualizaÁ„o do .gitignore (ignorando caches, .env e snapshot*.txt) e remoÁ„o de arquivos .pyc rastreados no Ìndice.

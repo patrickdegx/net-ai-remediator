@@ -1,8 +1,9 @@
-# Módulos padrão do Python: logging para mensagens estruturadas, uuid para gerar IDs únicos
-# e datetime para carimbar data/hora dos eventos.
+# Módulos padrão do Python: json para serializar relatórios com segurança, logging para
+# mensagens estruturadas, uuid para gerar IDs únicos e datetime para carimbar data/hora.
+import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 # Importações internas do projeto (cada pacote tem seu __init__.py).
 from src.ai.analyzer import NetworkAIAnalyzer
@@ -39,8 +40,9 @@ def executar_pipeline(tipo_driver: str = "simulador") -> IncidenteRede:
     log_bruto = driver.coletar_logs_recentes()
     equipamento = getattr(driver, "nome_equipamento", "router-borda-sp01")
 
-    # 4. Cria um ID único para o incidente e instancia a dataclass IncidenteRede.
-    incidente_id = f"INC-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
+    # 4. Cria um ID único no fuso horário local e instancia a dataclass IncidenteRede.
+    agora_local = datetime.now().astimezone()
+    incidente_id = f"INC-{agora_local.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
     incidente = IncidenteRede(
         incidente_id=incidente_id,
         equipamento=equipamento,
@@ -94,14 +96,16 @@ def executar_pipeline(tipo_driver: str = "simulador") -> IncidenteRede:
 
         # Salva o relatório completo em JSON no S3 direto da memória.
         s3_key = f"relatorios/{incidente.incidente_id}.json"
-        relatorio_json = (
-            "{\n"
-            f'  "incidente_id": "{incidente.incidente_id}",\n'
-            f'  "equipamento": "{incidente.equipamento}",\n'
-            f'  "severidade": "{incidente.severidade}",\n'
-            f'  "diagnostico": "{incidente.diagnostico}",\n'
-            f'  "comando_remediacao": "{incidente.comando_remediacao}"\n'
-            "}"
+        relatorio_json = json.dumps(
+            {
+                "incidente_id": incidente.incidente_id,
+                "equipamento": incidente.equipamento,
+                "severidade": incidente.severidade,
+                "diagnostico": incidente.diagnostico,
+                "comando_remediacao": incidente.comando_remediacao,
+            },
+            ensure_ascii=False,
+            indent=2,
         )
         if aws.enviar_conteudo_texto(
             conteudo=relatorio_json,

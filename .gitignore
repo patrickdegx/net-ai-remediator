@@ -1,2 +1,4 @@
-
-snapshot_projeto.txt
+__pycache__/
+*.py[cod]
+.env
+snapshot*.txt
