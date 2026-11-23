@@ -1,38 +1,65 @@
-version: "3.8"
-
+# Serviços da aplicação e da infraestrutura AWS simulada via LocalStack.
 services:
   localstack:
+    # Nome fixo do container do LocalStack.
     container_name: devops_aws_sim
+    # Imagem oficial do LocalStack fixada na versão 3.8.1.
     image: localstack/localstack:3.8.1
+    # Expõe a porta 4566 do LocalStack apenas na interface local do host.
     ports:
       - "127.0.0.1:4566:4566"
     environment:
+      # Serviços AWS simulados habilitados no LocalStack.
       - SERVICES=s3,dynamodb,sns,sqs,secretsmanager
+      # Região padrão usada nas chamadas AWS/LocalStack.
       - AWS_DEFAULT_REGION=us-east-1
+      # Habilita logs detalhados do LocalStack.
       - DEBUG=1
     volumes:
+      # Permite acesso ao socket do Docker se necessário pelo LocalStack.
       - "/var/run/docker.sock:/var/run/docker.sock"
     networks:
       - net-ai-net
 
   net-ai-app:
     build:
+      # Contexto na raiz do repositório para acessar requirements.txt, src/ e main.py.
       context: ..
+      # Usa o Dockerfile na raiz do projeto.
       dockerfile: Dockerfile
     container_name: net_ai_remediator_app
+    # Monta o código local em /app para refletir alterações sem rebuild obrigatório.
     volumes:
       - ..:/app
     environment:
+      # Define o ambiente local para o AppConfig.
+      - APP_ENV=local
+      # Região padrão da AWS/LocalStack.
       - AWS_DEFAULT_REGION=us-east-1
+      # Credenciais fictícias para o LocalStack.
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
+      # Nome do serviço LocalStack na rede interna do Docker Compose.
       - LOCALSTACK_HOST=localstack
+      # URL do Ollama acessível a partir do container na rede do host (ajuste se o Ollama rodar em outro host).
+      - OLLAMA_URL=http://host.docker.internal:11434
+      # Modelo padrão utilizado pela camada de IA.
+      - OLLAMA_MODEL=llama3
+    # Aguarda o serviço localstack ser iniciado antes de subir a aplicação.
     depends_on:
       - localstack
     networks:
       - net-ai-net
-    command: python tests/teste_parser2.py
+    # Executa o fluxo principal da aplicação no container.
+    command: python main.py
 
 networks:
+  # Rede bridge compartilhada entre localstack e net-ai-app.
   net-ai-net:
     driver: bridge
+
+
+
+
+
+    ###Nota sobre OLLAMA_URL dentro do container: se o seu Ollama estiver rodando na máquina host (Windows), [http://host.docker.internal:11434](http://host.docker.internal:11434) costuma funcionar no Docker Desktop; se o Ollama estiver em outro endereço/rede, basta alterar OLLAMA_URL no docker-compose.yml ou no .env.
