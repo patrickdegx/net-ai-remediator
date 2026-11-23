@@ -1,242 +1,195 @@
-# Contexto do Projeto: Net-AI Remediator (Portf√≥lio DevOps & Redes)
+# Contexto do Projeto: Net-AI Remediator (PortfÛlio DevOps & Redes)
 
 ## 1. Objetivo do Projeto
-Desenvolver uma ferramenta aut√¥noma de monitoramento, diagn√≥stico e remedia√ß√£o de rede e nuvem para portf√≥lio profissional focado em vagas de **DevOps / Engenharia de Redes**. O projeto demonstra dom√≠nio de infraestrutura h√≠brida (On-Premises + Cloud), automa√ß√£o em Python com Programa√ß√£o Orientada a Objetos (POO) e an√°lise inteligente de logs utilizando Intelig√™ncia Artificial local.
+Desenvolver uma ferramenta autÙnoma de monitoramento, diagnÛstico e remediaÁ„o de rede e nuvem para portfÛlio profissional focado em vagas de **DevOps / Engenharia de Redes**. O projeto demonstra domÌnio de infraestrutura hÌbrida (On-Premises + Cloud), automaÁ„o em Python com ProgramaÁ„o Orientada a Objetos (POO) e an·lise inteligente de logs utilizando InteligÍncia Artificial local.
 
-## 2. Arquitetura H√≠brida (On-Premises + Cloud + IA)
-- **Camada On-Premises / Rede:** Roteadores simulados via containers Linux (**FRRouting / FRR**) e integra√ß√£o futura via rede *Bridge/Host-Only* com m√°quinas virtuais reais no **VMware / EVE-NG** (ex: **MikroTik RouterOS**).
-- **Camada Cloud (AWS Simulada):** Uso do **Docker** + **LocalStack** para emular servi√ßos da AWS localmente (S3, EC2, IAM, CloudWatch Logs) sem custos financeiros.
-- **Camada de Intelig√™ncia & Remedia√ß√£o (IA Local):** Execu√ß√£o de LLMs localmente via **Ollama** para ler logs de rede/sistema, diagnosticar falhas e sugerir comandos de corre√ß√£o.
+## 2. Arquitetura HÌbrida (On-Premises + Cloud + IA)
+- **Camada On-Premises / Rede:** Simulador de roteador (`SimuladorRoteadorDriver`), driver SSH com `NetmikoRouterDriver` (incluindo retry com backoff exponencial, validaÁ„o de rede de gerÍncia e integraÁ„o com Secrets Manager), parsing estruturado de CLI via `TextFSM` (`NetworkParser`) e gatilhos de eventos em tempo real via Webhook HTTP e UDP Syslog (`src/triggers/event_trigger.py`).
+- **Camada Cloud (AWS / LocalStack):** Uso do **Docker** + **LocalStack** para emular localmente serviÁos da AWS (`S3`, `DynamoDB`, `Secrets Manager`, `SQS` e `SNS`) na regi„o `us-east-1`, com suporte a configuraÁ„o de ambiente via `AppConfig` e `AWSManager`.
+- **Camada de InteligÍncia & RemediaÁ„o (IA Local):** ExecuÁ„o de LLMs localmente via **Ollama** (`NetworkAIAnalyzer`, ex.: `llama3`) para analisar logs/saÌdas de CLI, consultar histÛrico recente de incidentes no DynamoDB (RAG), validar comandos e sugerir aÁıes de remediaÁ„o.
 
-## 3. Padr√µes de Engenharia e Estrutura de Pastas
+## 3. Padrıes de Engenharia e Estrutura de Pastas
 - **Linguagem:** Python 3 (modularizado e orientado a objetos).
-- **Design Patterns:**
-  * **Factory Pattern (`src/network`):** Instancia drivers de conex√£o (SSH/API) dinamicamente por fabricante (FRR, MikroTik, etc.).
-  * **Strategy Pattern (`src/ai`):** Permite alternar o motor de IA (Ollama local, APIs externas, etc.) sem alterar o restante do c√≥digo.
-- **√ùrvore de Diret√≥rios Criada (`~/net-ai-remediator`):**
+- **Padrıes e MÛdulos Principais:**
+  * **Factory Pattern (`src/network/drivers.py`):** `NetworkDriverFactory` instancia drivers de rede (`simulador` ou `netmiko`).
+  * **Gatilhos de Eventos (`src/triggers/event_trigger.py`):** `WebhookEventServer` e `SyslogUDPServer` normalizam eventos e alimentam o pipeline no `main.py`.
+- **¡rvore de DiretÛrios (`net-ai-remediator`):**
   ```text
   net-ai-remediator/
-  ‚îú‚îÄ‚îÄ docs/               # Documenta√ß√£o e CONTEXT.md (Save Game do projeto)
-  ‚îú‚îÄ‚îÄ infra/              # Arquivos de infraestrutura (docker-compose.yml)
-  ‚îú‚îÄ‚îÄ logs/               # Armazenamento local de logs para testes
-  ‚îú‚îÄ‚îÄ src/                # C√≥digo-fonte principal (pacotes Python com __init__.py)
-  ‚îÇ   ‚îú‚îÄ‚îÄ ai/             # analyzer.py (Integra√ß√£o com IA)
-  ‚îÇ   ‚îú‚îÄ‚îÄ cloud/          # aws_client.py (Integra√ß√£o AWS / LocalStack)
-  ‚îÇ   ‚îú‚îÄ‚îÄ core/           # config.py (Configura√ß√µes globais)
-  ‚îÇ   ‚îî‚îÄ‚îÄ network/        # drivers.py (Conex√µes SSH e parsers)
-  ‚îú‚îÄ‚îÄ tests/              # Testes unit√°rios e de integra√ß√£o
-  ‚îÇ   ‚îú‚îÄ‚îÄ teste_aws_16_11_26.py  # Testes de integra√ß√£o S3 (b√°sico e avan√ßado)
-  ‚îÇ   ‚îú‚îÄ‚îÄ teste_dynamodb.py      # Testes de integra√ß√£o DynamoDB
-  ‚îÇ   ‚îú‚îÄ‚îÄ teste_secrets.py       # Testes de integra√ß√£o Secrets Manager
-  ‚îÇ   ‚îú‚îÄ‚îÄ teste_sqs.py           # Testes de integra√ß√£o SQS
-  ‚îÇ   ‚îî‚îÄ‚îÄ teste_sns.py           # Testes de integra√ß√£o SNS
-  ‚îú‚îÄ‚îÄ main.py             # Ponto de entrada da aplica√ß√£o
-  ‚îú‚îÄ‚îÄ requirements.txt    # Depend√™ncias Python
-  ‚îî‚îÄ‚îÄ README.md           # Apresenta√ß√£o do projeto no GitHub
+  ??? docs/                 # DocumentaÁ„o e CONTEXT.md
+  ??? infra/                # Arquivos de infraestrutura (docker-compose.yml)
+  ??? logs/                 # Armazenamento local de logs para testes
+  ??? src/                  # CÛdigo-fonte principal (pacotes Python com __init__.py)
+  ?   ??? ai/               # analyzer.py (An·lise via Ollama e validaÁ„o de comandos)
+  ?   ??? cloud/            # aws_client.py (IntegraÁ„o AWS / LocalStack)
+  ?   ??? core/             # config.py e models.py (ConfiguraÁıes e dataclasses)
+  ?   ??? network/          # drivers.py, parser.py e templates TextFSM
+  ?   ??? triggers/         # event_trigger.py (Webhook HTTP e Syslog UDP)
+  ??? tests/                # Scripts de teste e validaÁ„o
+  ??? main.py               # Ponto de entrada e orquestraÁ„o do pipeline
+  ??? requirements.txt      # DependÍncias Python
+  ??? README.md             # DocumentaÁ„o do repositÛrio
+
+
 
 
   Contexto do Projeto: Net-AI Remediator
-Data da Atualiza√ß√£o: 16/11/2026
-Status Atual: Camada Cloud AWS (S3, DynamoDB, Secrets Manager, SQS e SNS) 100% finalizada e validada localmente via LocalStack.
+Data da AtualizaÁ„o: 16/11/2026
+
+Status Atual: Camada Cloud AWS (S3, DynamoDB, Secrets Manager, SQS e SNS) implementada e validada localmente via LocalStack.
 
 1. Infraestrutura & Docker (infra/docker-compose.yml)
-Localiza√ß√£o do Arquivo: infra/docker-compose.yml (execu√ß√£o via docker-compose -f infra/docker-compose.yml up -d).
+LocalizaÁ„o do Arquivo: infra/docker-compose.yml (execuÁ„o via docker-compose -f infra/docker-compose.yml up -d).
 
-Imagem Utilizada: localstack/localstack:3.8.1 (vers√£o Community est√°vel).
+Imagem Utilizada: localstack/localstack:3.8.1 (vers„o Community est·vel).
 
-Nota T√©cnica: Evitar a tag :latest, pois vers√µes mais recentes exigem autentica√ß√£o/licen√ßa Pro (LOCALSTACK_AUTH_TOKEN, retornando exit code 55).
+Nota TÈcnica: Evitar a tag :latest, pois versıes mais recentes podem exigir autenticaÁ„o/licenÁa Pro (LOCALSTACK_AUTH_TOKEN).
 
-Mapeamento de Rede: Porta configurada explicitamente como 127.0.0.1:4566:4566 para evitar bloqueios de firewall/rede no Windows.
+Mapeamento de Rede: Porta configurada como 127.0.0.1:4566:4566 para evitar bloqueios de firewall/rede no Windows.
 
-Servi√ßos Ativos: Inicialmente s3 e posteriormente expandido para s3,dynamodb,sns,sqs,secretsmanager na regi√£o padr√£o us-east-1 (container devops_aws_sim).
+ServiÁos Ativos: s3,dynamodb,sns,sqs,secretsmanager na regi„o padr„o us-east-1.
 
-2. M√≥dulo Cloud (src/cloud/aws_client.py)
-A classe AWSManager foi implementada com suporte completo ao ciclo de vida de objetos no S3:
+2. MÛdulo Cloud (src/cloud/aws_client.py)
+A classe AWSManager foi implementada com suporte ao ciclo de vida de objetos no S3:
 
-Configura√ß√£o de Cliente: Uso de botocore.config.Config com s3={'addressing_style': 'path'} para garantir compatibilidade de resolu√ß√£o de URLs locais no Windows (http://localhost:4566/<bucket>).
+ConfiguraÁ„o de Cliente: Uso de botocore.config.Config com s3={'addressing_style': 'path'} para compatibilidade de resoluÁ„o de URLs locais no Windows (http://localhost:4566/<bucket>).
 
-M√©todos Implementados (Etapa 1 - Base S3):
+MÈtodos Implementados (Base S3):
 
 criar_bucket(bucket_name): Cria buckets S3.
 
-listar_buckets(): Lista todos os buckets dispon√≠veis na conta/simulador.
+listar_buckets(): Lista os buckets disponÌveis.
 
-enviar_arquivo(file_name, bucket_name, object_name): Faz upload de arquivos locais para o S3.
+enviar_arquivo(file_name, bucket_name, object_name, metadata=None): Faz upload de arquivos locais para o S3, com suporte opcional a metadados via ExtraArgs.
 
-baixar_arquivo(bucket_name, object_name, file_name): Realiza o download de objetos do S3 para o sistema local.
+baixar_arquivo(bucket_name, object_name, file_name): Baixa objetos do S3 para o sistema local.
 
-deletar_arquivo(bucket_name, object_name): Remove objetos espec√≠ficos de dentro do bucket (limpeza de logs/tempor√°rios).
+deletar_arquivo(bucket_name, object_name): Remove objetos especÌficos de dentro do bucket.
 
-gerar_url_presassinada(bucket_name, object_name, expiration=3600): Gera links tempor√°rios e assinados criptograficamente para acesso seguro e controlado a objetos privados sem expor credenciais.
+gerar_url_presassinada(bucket_name, object_name, expiration=3600): Gera URLs tempor·rias e assinadas para acesso controlado a objetos.
 
-3. Valida√ß√£o & Conceitos Estudados (tests/teste_aws_16_11_26.py)
-Fluxo de Teste Integrado: Script executado com sucesso validando ponta a ponta: cria√ß√£o do bucket net-ai-bucket-teste-2026, listagem, upload de logs/teste_log.txt, download, gera√ß√£o de URL pr√©-assinada e dele√ß√£o final do objeto.
+3. ValidaÁ„o & Conceitos Estudados (tests/teste_aws_16_11_26.py)
+Fluxo de Teste Integrado: Script executado validando criaÁ„o de bucket, listagem, upload de arquivo de log, download, geraÁ„o de URL prÈ-assinada e deleÁ„o do objeto.
 
-Valida√ß√£o de Comportamento S3 (XML NoSuchKey): Ao abrir a URL pr√©-assinada no navegador ap√≥s a execu√ß√£o completa do script de teste, o LocalStack retornou o XML padr√£o da AWS <Code>NoSuchKey</Code>. Isso comprovou na pr√°tica que:
+ValidaÁ„o de Comportamento S3 (NoSuchKey): Ao acessar a URL prÈ-assinada apÛs a remoÁ„o do objeto, o LocalStack retornou NoSuchKey, confirmando a validaÁ„o da assinatura da URL e a exclus„o prÈvia do arquivo.
 
-A assinatura digital da URL pr√©-assinada (AWSAccessKeyId + Signature + Expires) foi validada corretamente pelo servidor.
-
-O m√©todo deletar_arquivo havia removido o objeto com sucesso logo antes da requisi√ß√£o.
-
-Formas de Inspe√ß√£o do LocalStack:
+Formas de InspeÁ„o do LocalStack:
 
 Via AWS CLI: aws --endpoint-url=http://localhost:4566 s3 ls
 
 Via Healthcheck HTTP: http://localhost:4566/_localstack/health
 
-Via c√≥digo Python (s3_client.list_objects_v2).
+Via cÛdigo Python (s3_client.list_objects_v2).
 
-4. Atualiza√ß√µes Finais (Sess√£o Noturna - 16/11/2026)
-Acr√©scimos realizados no AWSManager (src/cloud/aws_client.py) e na infraestrutura para elevar o m√≥dulo ao padr√£o de produ√ß√£o:
+4. AtualizaÁıes Finais (Sess„o Noturna ó 16/11/2026)
+4.1. Engenharia de Software e Expans„o LocalStack
+RefatoraÁ„o Estrutural: Uso do mÛdulo logging, adiÁ„o de Type Hints nos mÈtodos e tratamento especÌfico de botocore.exceptions.ClientError.
 
-4.1. Engenharia de Software e Expans√£o LocalStack
-Refatora√ß√£o Estrutural: Substitui√ß√£o de print() pelo m√≥dulo nativo logging (formato com timestamp e n√≠veis [INFO]/[ERROR]), adi√ß√£o de Type Hints em todos os m√©todos e tratamento espec√≠fico de botocore.exceptions.ClientError.
+Expans„o de ServiÁos (infra/docker-compose.yml): Vari·vel SERVICES configurada para s3,dynamodb,sns,sqs,secretsmanager, com retries={'max_attempts': 3, 'mode': 'standard'} no Config.
 
-Expans√£o de Servi√ßos (infra/docker-compose.yml): Vari√°vel SERVICES atualizada para s3,dynamodb,sns,sqs,secretsmanager, mantendo retries={'max_attempts': 3, 'mode': 'standard'} no Config.
+4.2. EvoluÁıes AvanÁadas no S3 (self.s3_client)
+enviar_conteudo_texto(conteudo, bucket_name, object_name, metadata=None, content_type="text/plain; charset=utf-8"): Grava strings (logs, JSONs, relatÛrios) direto da memÛria via put_object.
 
-4.2. Evolu√ß√µes Avan√ßadas no S3 (self.s3_client)
-Suporte a Metadados no Upload F√≠sico: enviar_arquivo atualizado para aceitar o par√¢metro opcional metadata: Optional[Dict[str, str]] = None via ExtraArgs.
+ler_conteudo_texto(bucket_name, object_name): LÍ e decodifica objetos do S3 para memÛria via get_object.
 
-Novos M√©todos Implementados:
-7. enviar_conteudo_texto(conteudo, bucket_name, object_name, metadata=None, content_type="text/plain; charset=utf-8"): Grava strings (logs brutos, JSONs, relat√≥rios da IA) direto da mem√≥ria RAM via put_object, evitando arquivos tempor√°rios em disco.
-8. ler_conteudo_texto(bucket_name, object_name): L√™ e decodifica objetos do S3 direto para a mem√≥ria RAM via get_object.
-9. listar_arquivos(bucket_name, prefixo=""): Listagem filtrada por prefixo (list_objects_v2), separando caminhos l√≥gicos (relatorios/ vs logs/).
-10. arquivo_existe(bucket_name, object_name): Checagem leve via requisi√ß√£o HEAD (head_object), capturando erros 404/NoSuchKey.
-11. obter_metadados(bucket_name, object_name): L√™ metadados imut√°veis gravados no cabe√ßalho do objeto.
-12. definir_tags(bucket_name, object_name, tags): Aplica/atualiza tags din√¢micas (put_object_tagging) para rastreamento e ciclo de vida.
-13. obter_tags(bucket_name, object_name): Recupera tags associadas ao objeto (get_object_tagging).
+listar_arquivos(bucket_name, prefixo=""): Lista chaves filtradas por prefixo (list_objects_v2).
 
-4.3. M√≥dulo DynamoDB (self.dynamodb_client & tests/teste_dynamodb.py)
-Implementa√ß√£o do banco NoSQL para indexar o hist√≥rico estruturado dos incidentes de rede e vincular cada ocorr√™ncia ao relat√≥rio salvo no S3 (s3_key):
+arquivo_existe(bucket_name, object_name): Verifica existÍncia via head_object, tratando 404 / NoSuchKey.
 
-M√©todos Implementados:
+obter_metadados(bucket_name, object_name): Recupera metadados do objeto via head_object.
 
-criar_tabela_incidentes(table_name="net-ai-incidentes"): Cria tabela NoSQL com Partition Key incidente_id (S) e BillingMode='PAY_PER_REQUEST', tratando ResourceInUseException caso j√° exista.
+definir_tags(bucket_name, object_name, tags): Aplica ou atualiza tags via put_object_tagging.
 
-registrar_incidente(table_name, incidente_id, equipamento, severidade, diagnostico_ia, s3_key, status="PENDENTE"): Insere registro estruturado (put_item) vinculando o evento ao arquivo no S3.
+obter_tags(bucket_name, object_name): LÍ tags associadas ao objeto via get_object_tagging.
 
-buscar_incidente(table_name, incidente_id): Consulta pela chave prim√°ria (get_item) e converte o formato tipado do DynamoDB ({'S': 'valor'}) para dicion√°rio Python limpo.
+4.3. MÛdulo DynamoDB (self.dynamodb_client & tests/teste_dynamodb.py)
+criar_tabela_incidentes(table_name="net-ai-incidentes"): Cria tabela com Partition Key incidente_id (S) e BillingMode='PAY_PER_REQUEST', tratando ResourceInUseException.
 
-atualizar_status_incidente(table_name, incidente_id, novo_status): Atualiza o estado do incidente (update_item, ex: ANALISADO ‚Üí REMEDIADO) usando ExpressionAttributeNames (#st) para evitar conflito com a palavra reservada status.
+registrar_incidente(table_name, incidente_id, equipamento, severidade, diagnostico_ia, s3_key, status="PENDENTE"): Insere registro estruturado via put_item.
 
-Valida√ß√£o (tests/teste_dynamodb.py): Testado ponta a ponta com sucesso (cria√ß√£o da tabela net-ai-incidentes, registro de INC-2026-001, busca e atualiza√ß√£o de status para REMEDIADO).
+buscar_incidente(table_name, incidente_id): Consulta por chave prim·ria via get_item e converte para dicion·rio Python.
 
-5. Atualiza√ß√µes de Mensageria e Cofre (17/11/2026)
-Conclus√£o integral da camada Cloud no AWSManager (src/cloud/aws_client.py) com a implementa√ß√£o e valida√ß√£o dos tr√™s servi√ßos restantes:
+atualizar_status_incidente(table_name, incidente_id, novo_status): Atualiza o campo status via update_item usando ExpressionAttributeNames (#st).
 
-5.1. M√≥dulo Secrets Manager (self.secrets_client & tests/teste_secrets.py)
-Cofre de credenciais de automa√ß√£o (m√°quina para m√°quina) para evitar exposi√ß√£o de senhas de roteadores e chaves de API no c√≥digo-fonte/GitHub:
+5. AtualizaÁıes de Mensageria e Cofre (17/11/2026)
+5.1. MÛdulo Secrets Manager (self.secrets_client & tests/teste_secrets.py)
+criar_segredo(nome_segredo, segredo_dict, descricao=""): Cria segredo em JSON via create_secret, tratando ResourceExistsException.
 
-M√©todos Implementados:
+buscar_segredo(nome_segredo): Recupera segredo via get_secret_value e retorna dicion·rio Python.
 
-criar_segredo(nome_segredo, segredo_dict, descricao=""): Grava dicion√°rios de credenciais (host, usu√°rio, senha, porta) convertidos em JSON no cofre (create_secret), tratando ResourceExistsException.
+atualizar_segredo(nome_segredo, novos_dados_dict): Atualiza segredo existente via put_secret_value.
 
-buscar_segredo(nome_segredo): Recupera credenciais diretamente para a mem√≥ria RAM (get_secret_value) e retorna um dicion√°rio Python limpo.
+5.2. MÛdulo SQS (self.sqs_client & tests/teste_sqs.py)
+criar_fila(nome_fila="net-ai-alertas-queue"): Cria fila via create_queue e retorna QueueUrl.
 
-atualizar_segredo(nome_segredo, novos_dados_dict): Realiza rota√ß√£o/atualiza√ß√£o de credenciais existentes (put_secret_value).
+enviar_alerta_fila(queue_url, evento_dict): Publica mensagem JSON na fila via send_message.
 
-Valida√ß√£o (tests/teste_secrets.py): Testado ciclo completo de cria√ß√£o, leitura e rota√ß√£o de senha para o segredo net-ai/roteadores/mikrotik-borda.
+consumir_alertas_fila(queue_url, max_mensagens=5): LÍ mensagens com Long Polling (WaitTimeSeconds=2) e remove mensagens processadas via delete_message.
 
-5.2. M√≥dulo SQS (self.sqs_client & tests/teste_sqs.py)
-Fila ass√≠ncrona que atua como amortecedor para absorver picos de alertas de rede sem sobrecarregar o motor de IA:
+5.3. MÛdulo SNS (self.sns_client & tests/teste_sns.py)
+criar_topico_alertas(nome_topico="net-ai-alertas-criticos"): Cria tÛpico via create_topic e retorna TopicArn.
 
-M√©todos Implementados:
+inscrever_alerta(topic_arn, protocolo, endpoint): Inscreve endpoint no tÛpico via subscribe.
 
-criar_fila(nome_fila="net-ai-alertas-queue"): Cria a fila no SQS (create_queue) e retorna a QueueUrl.
+disparar_alerta_critico(topic_arn, assunto, mensagem): Publica alerta via publish limitando o assunto a 100 caracteres (assunto[:100]).
 
-enviar_alerta_fila(queue_url, evento_dict): Publica tickets de incidentes (dicion√°rios convertidos em JSON) na fila (send_message).
+Contexto do Projeto: Net-AI Remediator
+Data da ⁄ltima AtualizaÁ„o: 17 de Novembro de 2026
 
-consumir_alertas_fila(queue_url, max_mensagens=5): L√™ mensagens usando Long Polling (WaitTimeSeconds=2), converte de volta para dicion√°rio e confirma o processamento removendo cada mensagem via ReceiptHandle (delete_message).
+1. Resumo do Progresso
+Foco na an·lise de logs via IA (NetworkAIAnalyzer), validaÁ„o de comandos de remediaÁ„o e injeÁ„o de histÛrico de incidentes (RAG) com persistÍncia no DynamoDB.
 
-Valida√ß√£o (tests/teste_sqs.py): Testado envio simult√¢neo de alertas (router-borda-sp01 e switch-core-rj01), consumo em lote e confirma√ß√£o de fila vazia ap√≥s processamento.
+2. Componentes Desenvolvidos e Atualizados
+Camada de IA & SeguranÁa (src/ai/analyzer.py):
 
-5.3. M√≥dulo SNS (self.sns_client & tests/teste_sns.py)
-Servi√ßo de mensageria Pub/Sub para disparo imediato de notifica√ß√µes cr√≠ticas aos administradores/NOC:
+IntegraÁ„o local com Ollama (llama3 via API configur·vel).
 
-M√©todos Implementados:
+Respostas determinÌsticas com "temperature": 0.0.
 
-criar_topico_alertas(nome_topico="net-ai-alertas-criticos"): Cria o canal de notifica√ß√µes (create_topic) e retorna o TopicArn.
+ValidaÁ„o de comandos (_validar_comando_seguro) bloqueando comandos destrutivos perigosos e permitindo comandos de diagnÛstico seguros com filtros.
 
-inscrever_alerta(topic_arn, protocolo, endpoint): Inscreve destinat√°rios (email, https, sqs) no t√≥pico (subscribe).
+InjeÁ„o de histÛrico recente de incidentes do DynamoDB no contexto de an·lise (RAG).
 
-disparar_alerta_critico(topic_arn, assunto, mensagem): Publica o alerta no t√≥pico (publish) aplicando fatiamento seguro assunto[:100] para respeitar o limite de caracteres do protocolo de e-mail da AWS.
+Camada de Rede (src/network/drivers.py):
 
-Valida√ß√£o (tests/teste_sns.py): Testada cria√ß√£o do t√≥pico, inscri√ß√£o de e-mail do NOC e disparo de alerta cr√≠tico retornando o MessageId.
+Interface base NetworkDriverInterface e SimuladorRoteadorDriver para simulaÁ„o de coleta de logs e aplicaÁ„o de remediaÁ„o, alÈm de NetmikoRouterDriver e NetworkDriverFactory.
 
-6. Pr√≥ximos Passos
-Op√ß√£o B (Motor de An√°lise de Rede & IA): Iniciar o desenvolvimento das camadas src/network/drivers.py (aplicando Factory Pattern para coleta/parser de logs de roteadores FRR/MikroTik) e src/ai/analyzer.py (aplicando Strategy Pattern para diagn√≥stico inteligente via LLM/Ollama) integrando com toda a infraestrutura AWSManager j√° conclu√≠da.
+Contexto do Projeto: Net-AI Remediator
+Data da ⁄ltima AtualizaÁ„o: 18 de Novembro de 2026
 
+Status do Projeto: EvoluÁ„o da camada de rede, parsing estruturado, resiliÍncia e gatilhos de eventos
 
-# Contexto do Projeto: Net-AI Remediator
-**Data da √öltima Atualiza√ß√£o:** 17 de Novembro de 2026
+1. O Que J· Foi ConcluÌdo
+Camada de IA & SeguranÁa (src/ai/analyzer.py): IntegraÁ„o com Ollama, temperature: 0.0, validaÁ„o de comandos de remediaÁ„o e suporte a histÛrico recente (RAG).
 
-## 1. Resumo do Progresso de Hoje
-Hoje focamos na robustez, seguran√ßa e intelig√™ncia do motor de IA (`AIAnalyzer`), aplicando conceitos avan√ßados de engenharia de software, Strategy Pattern e RAG (Retrieval-Augmented Generation) com persist√™ncia em nuvem simulada.
+Infraestrutura Cloud (LocalStack): S3, DynamoDB, Secrets Manager, SQS e SNS implementados no AWSManager.
 
----
+Camada de Rede (src/network/drivers.py): NetworkDriverInterface, SimuladorRoteadorDriver, NetmikoRouterDriver e NetworkDriverFactory.
 
-## 2. Componentes Desenvolvidos e Atualizados
+2. Pilares do Roadmap
+[Pilar 1] Acesso Real via SSH (Netmiko): NetmikoRouterDriver com validaÁ„o de rede de gerÍncia e busca de credenciais no Secrets Manager.
 
-### A. Camada de IA & Seguran√ßa (`src/ai/analyzer.py`)
-* **Modelo Local (Ollama):** Integra√ß√£o com o `llama3` rodando localmente via API (`http://localhost:11434/api/generate`).
-* **Respostas Determin√≠sticas:** Configura√ß√£o de `"temperature": 0.0` no payload do Ollama para eliminar "alucina√ß√µes" e garantir diagn√≥sticos t√©cnicos consistentes e precisos para engenharia de redes.
-* **Blacklist de Seguran√ßa de Comandos:** Implementa√ß√£o do m√©todo `_validar_comando_seguro` que barra imediatamente comandos destrutivos perigosos (como `reload`, `format`, `erase`, `delete`, `shutdown`, etc.), permitindo que comandos leg√≠timos de diagn√≥stico com filtros (como `show ip bgp summary | include ...`) passem de forma flex√≠vel e segura.
-* **RAG (Contexto Hist√≥rico):** Inje√ß√£o din√¢mica de incidentes passados recuperados do DynamoDB diretamente no prompt da IA, permitindo correla√ß√£o avan√ßada de falhas (ex: identifica√ß√£o de flaps intermitentes e falhas recorrentes na mesma interface).
+[Pilar 2] ResiliÍncia e Tratamento de Erros: Retry com backoff exponencial e tratamento de timeout/autenticaÁ„o no NetmikoRouterDriver.
 
-### B. Camada de Simula√ß√£o de Rede (`src/network/drivers.py` - Iniciado)
-* **Strategy Pattern (Clean Architecture):** Cria√ß√£o da interface base abstrata (`NetworkDriverInterface`) padronizando o contrato para coleta de logs e execu√ß√£o de comandos de remedia√ß√£o.
-* **Driver Simulado (`SimuladorRoteadorDriver`):** Estrutura inicial criada para simular um roteador de borda (`router-borda-sp01`) gerando logs de queda BGP e simulando a aplica√ß√£o de remedia√ß√µes na CLI.
+[Pilar 3] Parsing Estruturado de CLI (TextFSM): NetworkParser e coletar_cli_estruturada() integrados ao pipeline e ao relatÛrio JSON no S3.
 
----
+[Pilar 4] Gatilhos de Eventos em Tempo Real (Webhook / Syslog): WebhookEventServer e SyslogUDPServer em src/triggers/event_trigger.py integrados ao main.py (--webhook, --syslog e _processar_evento_gatilho).
 
-## 3. Pr√≥ximos Passos Imediatos
-* Finalizar e integrar o fluxo completo do **Simulador de Rede** com o pipeline de ponta a ponta:
-  `Simulador de Rede` $\rightarrow$ `Fila SQS` $\rightarrow$ `IA com RAG (Ollama + DynamoDB)` $\rightarrow$ `Armazenamento de Relat√≥rio (S3)` $\rightarrow$ `Disparo de Alerta (SNS)`.
+AtualizaÁ„o ó 22/11/2026
+Contexto do Projeto: Net-AI Remediator
+Data da ⁄ltima AtualizaÁ„o: 22 de Novembro de 2026
 
+Status do Projeto: Pipeline Principal Integrado com LocalStack, Ollama (llama3) e SincronizaÁ„o de Estado no DynamoDB
 
-
-  # Contexto do Projeto: Net-AI Remediator
-**Data da √öltima Atualiza√ß√£o:** 18 de Novembro de 2026
-**Status do Projeto:** Transi√ß√£o para Arquitetura de Produ√ß√£o e Laborat√≥rio Avan√ßado (EVE-NG / Dispositivos Reais)
-
-## 1. O Que J√° Foi Conclu√≠do
-* **Camada de IA & Seguran√ßa (`src/ai/analyzer.py`):**
-  * Integra√ß√£o local com Ollama (`llama3`).
-  * Respostas determin√≠sticas estritas (`temperature: 0.0`).
-  * Blindagem de comandos (`_validar_comando_seguro`) bloqueando a√ß√µes destrutivas e permitindo diagn√≥sticos seguros com pipes.
-  * RAG (Retrieval-Augmented Generation) com DynamoDB injetando hist√≥rico de incidentes passados no prompt.
-* **Infraestrutura em Nuvem Local (`LocalStack`):**
-  * Configura√ß√£o e testes validados para S3 (relat√≥rios), DynamoDB (hist√≥rico) e SQS/SNS (filas e alertas).
-* **Camada de Abstra√ß√£o de Rede (`src/network/drivers.py`):**
-  * Cria√ß√£o do padr√£o *Strategy Pattern* (`NetworkDriverInterface`) e do `SimuladorRoteadorDriver` para testes r√°pidos sem depend√™ncia de hardware pesado.
-
----
-
-## 2. O Que Iremos Construir (Roadmap Avan√ßado de Engenharia)
-* **[Pilar 1] Protocolo de Acesso Real (Netmiko):** Implementa√ß√£o do driver SSH corporativo para interagir com topologias reais ou VMs (EVE-NG/GNS3).
-* **[Pilar 2] Resili√™ncia e Tratamento de Erros:** Mecanismos de *retry*, timeout e blindagem contra falhas de conex√£o de rede.
-* **[Pilar 3] Parsing Inteligente de CLI (TextFSM):** Convers√£o de sa√≠das brutas de texto de roteadores em JSON estruturado para consumo otimizado da IA.
-* **[Pilar 4] Sistema de Gatilhos de Eventos (Syslog/Webhooks):** Captura automatizada de logs em tempo real para disparar o pipeline de remedia√ß√£o de ponta a ponta.
-
-
-
-
-## Atualiza√ß√£o 22/11/2026
-
-
-# Contexto do Projeto: Net-AI Remediator
-**Data da √öltima Atualiza√ß√£o:** 22 de Novembro de 2026
-**Status do Projeto:** Pipeline Principal Integrado com LocalStack, Ollama (`llama3`) e Sincroniza√ß√£o de Estado no DynamoDB
-
-ConfiguraÁ„o centralizada (src/core/config.py): ImplementaÁ„o da AppConfig (@dataclass(frozen=True)) lendo vari·veis de ambiente (LOCALSTACK_HOST, AWS_DEFAULT_REGION, OLLAMA_MODEL, OLLAMA_URL), definindo padrıes para bucket S3, tabela DynamoDB, fila SQS e tÛpico SNS, e expondo localstack_endpoint.
+ConfiguraÁ„o centralizada (src/core/config.py): ImplementaÁ„o de AppConfig (@dataclass(frozen=True)) lendo vari·veis de ambiente (LOCALSTACK_HOST, AWS_DEFAULT_REGION, OLLAMA_MODEL, OLLAMA_URL), definindo padrıes para bucket S3, tabela DynamoDB, fila SQS e tÛpico SNS, e expondo localstack_endpoint.
 
 Modelos de domÌnio (src/core/models.py): FormalizaÁ„o das estruturas IncidenteRede e DiagnosticoIA com @dataclass.
 
-PadronizaÁ„o de logging (src/cloud/aws_client.py): RemoÁ„o do logging.basicConfig(...) do mÛdulo para centralizar a configuraÁ„o de logs no ponto de entrada (main.py).
+PadronizaÁ„o de logging (src/cloud/aws_client.py): RemoÁ„o de logging.basicConfig(...) do mÛdulo para centralizar a configuraÁ„o de logs no ponto de entrada (main.py).
 
 OrquestraÁ„o e sincronizaÁ„o de estado (main.py): IntegraÁ„o do fluxo com driver via factory, modelos, NetworkAIAnalyzer e AWSManager (S3, DynamoDB, SQS, SNS), incluindo log quando o SNS n„o dispara fora de severidades ALTA ou CRITICA e atualizaÁ„o do status do incidente no DynamoDB para REMEDIADO quando aplicar_remediacao(...) retorna True.
 
-Ajustes de rede, IA e higiene de Git: Refinamentos em src/ai/analyzer.py e src/network/drivers.py, atualizaÁ„o do .gitignore (ignorando caches, .env e snapshot*.txt) e remoÁ„o de arquivos .pyc rastreados no Ìndice.
+Ajustes de rede, IA e higiene de Git: Refinamentos em src/ai/analyzer.py e src/network/drivers.py, atualizaÁ„o do .gitignore e remoÁ„o de arquivos .pyc rastreados no Ìndice.
 
 AtualizaÁ„o ó 23/11/2026
 HistÛrico recente no DynamoDB para RAG (src/cloud/aws_client.py): ImplementaÁ„o do mÈtodo buscar_historico_equipamento para recuperar incidentes anteriores de um equipamento e alimentar o contexto histÛrico da IA.
