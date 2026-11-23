@@ -237,3 +237,10 @@ Padronização de logging (src/cloud/aws_client.py): Remoção do logging.basicConfi
 Orquestração e sincronização de estado (main.py): Integração do fluxo com driver via factory, modelos, NetworkAIAnalyzer e AWSManager (S3, DynamoDB, SQS, SNS), incluindo log quando o SNS não dispara fora de severidades ALTA ou CRITICA e atualização do status do incidente no DynamoDB para REMEDIADO quando aplicar_remediacao(...) retorna True.
 
 Ajustes de rede, IA e higiene de Git: Refinamentos em src/ai/analyzer.py e src/network/drivers.py, atualização do .gitignore (ignorando caches, .env e snapshot*.txt) e remoção de arquivos .pyc rastreados no índice.
+
+Atualização — 23/11/2026
+Histórico recente no DynamoDB para RAG (src/cloud/aws_client.py): Implementação do método buscar_historico_equipamento para recuperar incidentes anteriores de um equipamento e alimentar o contexto histórico da IA.
+
+Integração do histórico antes da análise (main.py): Ajuste do fluxo para consultar e repassar historico_recente a analyzer.analisar_log_rede(...) antes da análise do log.
+
+Teste de validação (tests/teste_rag_historico.py): Criação e execução do teste validando registro e consulta do histórico de incidentes no DynamoDB via LocalStack.

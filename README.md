@@ -1,20 +1,38 @@
+Markdown
 # Net-AI Remediator
 
-Ferramenta autônoma de monitoramento, diagnóstico e remediação de rede e nuvem em Python (POO), voltada para cenários híbridos (On-Premises + Cloud + IA local).
+Ferramenta em Python (POO) de monitoramento, diagnóstico e remediação de incidentes de rede e nuvem, combinando drivers de rede, *parsing* com TextFSM, análise com IA local via Ollama e serviços AWS simulados via LocalStack.
 
-## Arquitetura
-* **Camada de Rede / On-Premises (`src/network/`):** Drivers de conexão (`NetworkDriverInterface`, `SimuladorRoteadorDriver`, `NetmikoRouterDriver`, `NetworkDriverFactory`) e *parser* com templates (`NetworkParser`).
-* **Camada de IA (`src/ai/`):** Análise de logs e sugestão de comandos com validação de segurança (`NetworkAIAnalyzer`).
-* **Camada Cloud (`src/cloud/`):** Integração com serviços AWS simulados via LocalStack (`AWSManager` — S3, DynamoDB, Secrets Manager, SQS e SNS).
-* **Core e Modelos (`src/core/`):** Configurações centralizadas (`config.py`) e estruturas de dados (`models.py`).
+**Última atualização:** 23/11/2026
 
-## Fluxo de Execução
-1. Coleta ou simulação de dados/logs de rede via drivers (`src/network/`).
-2. Normalização/interpretação das saídas com templates (`parser.py`).
-3. Diagnóstico e validação de comandos de remediação via IA (`analyzer.py`).
-4. Registro, armazenamento de relatórios e alertas/filas na camada cloud (`aws_client.py`).
+## Arquitetura e Módulos
+- **Camada de Rede (`src/network/`):** `NetworkDriverInterface`, `SimuladorRoteadorDriver`, `NetmikoRouterDriver` (com *retry/backoff* e tratamento de erros), `NetworkDriverFactory`, `NetworkParser` e *templates* em `src/network/templates/`.
+- **Camada de IA (`src/ai/`):** `NetworkAIAnalyzer` integrado ao Ollama (`llama3`, `temperature: 0.0`), com suporte a histórico recente (RAG) do DynamoDB, validação de comandos seguros e *fallback*.
+- **Camada Cloud (`src/cloud/`):** `AWSManager` operando com LocalStack (`S3`, `DynamoDB`, `Secrets Manager`, `SQS` e `SNS`), incluindo consulta de histórico de incidentes por equipamento (`buscar_historico_equipamento`).
+- **Core (`src/core/`):** `AppConfig` em `config.py` e modelos `IncidenteRede` e `DiagnosticoIA` em `models.py`.
+- **Orquestração (`main.py`):** Coordena coleta/simulação, consulta de histórico no DynamoDB, análise via IA, persistência/alertas/filas na camada cloud, remediação e sincronização de estado para `REMEDIADO` no DynamoDB.
 
 ## Como Executar
-1. Suba os serviços simulados com Docker Compose:
+
+1. **Suba a infraestrutura local (LocalStack / Docker):**
    ```bash
    docker-compose -f infra/docker-compose.yml up -d
+
+
+
+
+   Instale as dependências:
+
+
+pip install -r requirements.txt
+
+Configure variáveis de ambiente (opcional): Você pode definir variáveis como LOCALSTACK_HOST, AWS_DEFAULT_REGION, OLLAMA_MODEL e OLLAMA_URL (via ambiente ou arquivo .env local, ignorado pelo Git).
+
+Execute a aplicação ou os testes:
+
+python main.py
+python tests/teste_rag_historico.py
+
+
+
+
