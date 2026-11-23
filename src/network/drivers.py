@@ -1,36 +1,83 @@
+# Módulos padrão do Python: ipaddress para validar redes de gerência, logging para registros,
+# time para backoff em tentativas e abc para definir a interface base do driver.
 import ipaddress
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
+# Importa o parser TextFSM responsável por estruturar saídas de CLI em dicionários.
+from src.network.parser import NetworkParser
+
+# Tenta importar o Netmiko; se não estiver instalado no ambiente, evita quebrar o simulador.
 try:
     from netmiko import ConnectHandler, NetmikoAuthenticationException, NetmikoTimeoutException
     NETMIKO_DISPONIVEL = True
 except ImportError:
     NETMIKO_DISPONIVEL = False
 
+# Logger dedicado aos drivers de rede.
 logger = logging.getLogger("NetworkDriver")
 
 
 class NetworkDriverInterface(ABC):
+    # Contrato base (Strategy Pattern) para drivers simulados ou reais.
     @abstractmethod
     def coletar_logs_recentes(self) -> str:
         pass
 
+    # Contrato base para aplicar comandos de remediação no equipamento.
     @abstractmethod
     def aplicar_remediacao(self, comando: str) -> bool:
         pass
 
 
 class SimuladorRoteadorDriver(NetworkDriverInterface):
+    # Inicializa o simulador com o nome lógico do equipamento de rede.
     def __init__(self, nome_equipamento: str):
         self.nome_equipamento = nome_equipamento
         logger.info(f"Driver simulado inicializado: {self.nome_equipamento}")
 
+    # Simula a coleta de um log bruto de evento BGP.
     def coletar_logs_recentes(self) -> str:
         return "%BGP-5-ADJCHANGE: neighbor 10.255.0.2 Down - Hold Timer Expired. Interface Ethernet0/0 flap detected."
 
+    # Simula uma saída de CLI BGP e parseia via TextFSM usando o template padrão.
+    def coletar_cli_estruturada(
+        self,
+        comando: str = "show ip bgp summary",
+        template_path: str = "src/network/templates/cisco_ios_show_ip_bgp_summary.template",
+        raw_cli_output: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        # Se não for passada saída bruta customizada, usa um exemplo alinhado ao template BGP.
+        if raw_cli_output is None:
+            raw_cli_output = (
+                "10.255.0.1        4      65000       120       140         0         0         0      12\n"
+                "10.255.0.2        4      65001       250       300         0         0         0      Idle\n"
+            )
+
+        logger.info(f"[{self.nome_equipamento}] Coletando saída de CLI simulada: '{comando}'")
+
+        # Inicia a lista de registros estruturados vazia como fallback seguro.
+        dados_estruturados: List[Dict[str, Any]] = []
+        # Verifica se o arquivo de template existe no disco antes de chamar o NetworkParser.
+        if os.path.exists(template_path):
+            dados_estruturados = NetworkParser.parsear_arquivo(template_path, raw_cli_output)
+        else:
+            logger.warning(
+                f"[{self.nome_equipamento}] Template TextFSM não encontrado em '{template_path}'."
+            )
+
+        # Retorna saída bruta, comando, equipamento e dados estruturados extraídos pelo TextFSM.
+        return {
+            "equipamento": self.nome_equipamento,
+            "comando": comando,
+            "raw_output": raw_cli_output.strip(),
+            "parsed_data": dados_estruturados,
+        }
+
+    # Simula a execução do comando de remediação na CLI do roteador.
     def aplicar_remediacao(self, comando: str) -> bool:
         print(f"--> [SIMULADOR CLI {self.nome_equipamento}] Comando aplicado com sucesso: {comando}")
         return True
@@ -55,6 +102,7 @@ class NetmikoRouterDriver(NetworkDriverInterface):
         aws_manager=None,
         rede_gerencia_cidr: Optional[str] = "10.255.255.0/24",
     ):
+        # Garante que a biblioteca netmiko esteja disponível antes de configurar conexão SSH.
         if not NETMIKO_DISPONIVEL:
             raise ImportError("A biblioteca 'netmiko' não está instalada. Execute: pip install netmiko")
 
@@ -113,6 +161,7 @@ class NetmikoRouterDriver(NetworkDriverInterface):
             f"(gerência: {self.rede_gerencia_cidr or 'sem restrição CIDR'}, Max retries: {max_retries})"
         )
 
+    # Executa uma função com novas tentativas e backoff exponencial em caso de falha transitória.
     def _executar_com_retry(self, func, *args, **kwargs):
         """Executa uma operação com novas tentativas e intervalo crescente (backoff)."""
         tentativa = 0
@@ -148,6 +197,7 @@ class NetmikoRouterDriver(NetworkDriverInterface):
                 time.sleep(delay_atual)
                 delay_atual *= 2
 
+    # Coleta via SSH o sumário BGP do equipamento real utilizando a política de retry.
     def coletar_logs_recentes(self) -> str:
         def _acao():
             with ConnectHandler(**self.device_config) as conn:
@@ -156,6 +206,7 @@ class NetmikoRouterDriver(NetworkDriverInterface):
         logger.info(f"Iniciando coleta com política de resiliência em {self.ip}...")
         return self._executar_com_retry(_acao)
 
+    # Aplica o comando de remediação no equipamento real via SSH utilizando a política de retry.
     def aplicar_remediacao(self, comando: str) -> bool:
         def _acao():
             with ConnectHandler(**self.device_config) as conn:
@@ -181,6 +232,7 @@ class NetmikoRouterDriver(NetworkDriverInterface):
 
 
 class NetworkDriverFactory:
+    # Fábrica que instancia o driver adequado conforme o tipo solicitado ("simulador" ou "netmiko").
     @staticmethod
     def criar_driver(tipo: str, **kwargs) -> NetworkDriverInterface:
         tipo_normalizado = tipo.lower()
