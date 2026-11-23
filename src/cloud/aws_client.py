@@ -357,6 +357,52 @@ class AWSManager:
             logger.error(f"Erro ao atualizar status do incidente '{incidente_id}': {e}")
             return False
 
+    def buscar_historico_equipamento(
+        self,
+        table_name: str,
+        equipamento: str,
+        limite: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Busca incidentes anteriores de um equipamento no DynamoDB para contexto RAG."""
+        if limite <= 0:
+            return []
+
+        try:
+            response = self.dynamodb_client.scan(
+                TableName=table_name,
+                FilterExpression="equipamento = :eq",
+                ExpressionAttributeValues={":eq": {"S": equipamento}},
+            )
+            itens_brutos = response.get("Items", [])
+            if not itens_brutos:
+                logger.info(f"Nenhum histórico anterior encontrado para '{equipamento}' em '{table_name}'.")
+                return []
+
+            historico_limpo = [
+                {k: list(v.values())[0] for k, v in item.items()}
+                for item in itens_brutos
+            ]
+            # Ordena por incidente_id (formato INC-AAAAMMDD-HHMMSS-...) e mantém os mais recentes
+            historico_ordenado = sorted(
+                historico_limpo,
+                key=lambda x: x.get("incidente_id", ""),
+            )[-limite:]
+
+            logger.info(
+                f"Histórico recuperado para '{equipamento}': {len(historico_ordenado)} registro(s) "
+                f"(limite={limite})."
+            )
+            return historico_ordenado
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") == "ResourceNotFoundException":
+                logger.info(f"Tabela '{table_name}' ainda não existe; histórico inicial vazio.")
+                return []
+            logger.error(f"Erro AWS ao buscar histórico de '{equipamento}': {e.response['Error']['Message']}")
+            return []
+        except Exception as e:
+            logger.error(f"Erro inesperado ao buscar histórico de '{equipamento}': {e}")
+            return []
+
     # =========================================================================
     # OPERAÇÕES SECRETS MANAGER: COFRE DE CREDENCIAIS E CHAVES DE API
     # =========================================================================

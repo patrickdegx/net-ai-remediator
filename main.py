@@ -52,7 +52,26 @@ def executar_pipeline(tipo_driver: str = "simulador") -> IncidenteRede:
         status="COLETADO",
     )
 
-    # 5. Envia o log para o analisador de IA (Ollama + RAG + validação de comando seguro).
+    # 5. Conecta ao LocalStack/AWS (se disponível), busca histórico RAG e roda a análise da IA.
+    aws = None
+    queue_url = None
+    topic_arn = None
+    historico_recente = None
+
+    try:
+        aws = AWSManager(
+            endpoint_url=config.localstack_endpoint,
+            region_name=config.aws_region,
+        )
+        aws.criar_tabela_incidentes(config.dynamodb_table)
+        historico_recente = aws.buscar_historico_equipamento(
+            table_name=config.dynamodb_table,
+            equipamento=incidente.equipamento,
+            limite=5,
+        )
+    except Exception as exc:
+        logger.warning(f"Consulta de histórico no DynamoDB não concluída nesta execução: {exc}")
+
     analyzer = NetworkAIAnalyzer(
         modelo=config.ollama_model,
         ollama_url=config.ollama_url,
@@ -60,7 +79,7 @@ def executar_pipeline(tipo_driver: str = "simulador") -> IncidenteRede:
     resultado_ia = analyzer.analisar_log_rede(
         log_bruto=log_bruto,
         equipamento=incidente.equipamento,
-        historico_recente=None,  # Próxima evolução: buscar histórico real do DynamoDB.
+        historico_recente=historico_recente or None,
     )
 
     # 6. Preenche a dataclass DiagnosticoIA e atualiza o IncidenteRede.
@@ -75,83 +94,73 @@ def executar_pipeline(tipo_driver: str = "simulador") -> IncidenteRede:
     incidente.comando_remediacao = diagnostico_obj.comando_remediacao
     incidente.status = "ANALISADO"
 
-    # Guarda a referência do AWSManager fora do bloco try para podermos sincronizar o status
-    # no DynamoDB depois que a remediação for aplicada.
-    aws = None
-
-    # 7. Integração com LocalStack / AWS (S3, DynamoDB, SQS, SNS).
+    # 7. Persiste relatório/incidente e publica eventos no LocalStack / AWS (S3, DynamoDB, SQS, SNS).
     # Envolvemos em try/except para que, se o LocalStack não estiver acessível, o pipeline
     # ainda conclua a parte local sem quebrar.
-    try:
-        aws = AWSManager(
-            endpoint_url=config.localstack_endpoint,
-            region_name=config.aws_region,
-        )
+    if aws is not None:
+        try:
+            aws.criar_bucket(config.s3_bucket)
+            queue_url = aws.criar_fila(config.sqs_queue_name)
+            topic_arn = aws.criar_topico_alertas(config.sns_topic_name)
 
-        # Garante que bucket, tabela, fila e tópico existam.
-        aws.criar_bucket(config.s3_bucket)
-        aws.criar_tabela_incidentes(config.dynamodb_table)
-        queue_url = aws.criar_fila(config.sqs_queue_name)
-        topic_arn = aws.criar_topico_alertas(config.sns_topic_name)
-
-        # Salva o relatório completo em JSON no S3 direto da memória.
-        s3_key = f"relatorios/{incidente.incidente_id}.json"
-        relatorio_json = json.dumps(
-            {
-                "incidente_id": incidente.incidente_id,
-                "equipamento": incidente.equipamento,
-                "severidade": incidente.severidade,
-                "diagnostico": incidente.diagnostico,
-                "comando_remediacao": incidente.comando_remediacao,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        if aws.enviar_conteudo_texto(
-            conteudo=relatorio_json,
-            bucket_name=config.s3_bucket,
-            object_name=s3_key,
-            content_type="application/json",
-        ):
-            incidente.s3_key = s3_key
-
-        # Registra o incidente no DynamoDB vinculado ao s3_key.
-        aws.registrar_incidente(
-            table_name=config.dynamodb_table,
-            incidente_id=incidente.incidente_id,
-            equipamento=incidente.equipamento,
-            severidade=incidente.severidade,
-            diagnostico_ia=incidente.diagnostico,
-            s3_key=incidente.s3_key or "",
-            status=incidente.status,
-        )
-
-        # Enfileira no SQS e dispara alerta crítico no SNS se severidade for ALTA ou CRITICA.
-        if queue_url:
-            aws.enviar_alerta_fila(
-                queue_url,
+            # Salva o relatório completo em JSON no S3 direto da memória.
+            s3_key = f"relatorios/{incidente.incidente_id}.json"
+            relatorio_json = json.dumps(
                 {
                     "incidente_id": incidente.incidente_id,
                     "equipamento": incidente.equipamento,
                     "severidade": incidente.severidade,
-                    "s3_key": incidente.s3_key,
+                    "diagnostico": incidente.diagnostico,
+                    "comando_remediacao": incidente.comando_remediacao,
                 },
+                ensure_ascii=False,
+                indent=2,
+            )
+            if aws.enviar_conteudo_texto(
+                conteudo=relatorio_json,
+                bucket_name=config.s3_bucket,
+                object_name=s3_key,
+                content_type="application/json",
+            ):
+                incidente.s3_key = s3_key
+
+            # Registra o incidente no DynamoDB vinculado ao s3_key.
+            aws.registrar_incidente(
+                table_name=config.dynamodb_table,
+                incidente_id=incidente.incidente_id,
+                equipamento=incidente.equipamento,
+                severidade=incidente.severidade,
+                diagnostico_ia=incidente.diagnostico,
+                s3_key=incidente.s3_key or "",
+                status=incidente.status,
             )
 
-        severidade_normalizada = incidente.severidade.strip().upper()
-        if topic_arn and severidade_normalizada in ("ALTA", "CRITICA"):
-            aws.disparar_alerta_critico(
-                topic_arn=topic_arn,
-                assunto=f"[{severidade_normalizada}] {incidente.equipamento} - {incidente.incidente_id}",
-                mensagem=f"Diagnóstico: {incidente.diagnostico}\nComando sugerido: {incidente.comando_remediacao}",
-            )
-        else:
-            logger.info(
-                f"Notificação SNS não disparada (severidade='{severidade_normalizada}'; "
-                "alerta crítico configurado apenas para ALTA/CRITICA)."
-            )
-    except Exception as exc:
-        logger.warning(f"Integração AWS/LocalStack não concluída nesta execução: {exc}")
+            # Enfileira no SQS e dispara alerta crítico no SNS se severidade for ALTA ou CRITICA.
+            if queue_url:
+                aws.enviar_alerta_fila(
+                    queue_url,
+                    {
+                        "incidente_id": incidente.incidente_id,
+                        "equipamento": incidente.equipamento,
+                        "severidade": incidente.severidade,
+                        "s3_key": incidente.s3_key,
+                    },
+                )
+
+            severidade_normalizada = incidente.severidade.strip().upper()
+            if topic_arn and severidade_normalizada in ("ALTA", "CRITICA"):
+                aws.disparar_alerta_critico(
+                    topic_arn=topic_arn,
+                    assunto=f"[{severidade_normalizada}] {incidente.equipamento} - {incidente.incidente_id}",
+                    mensagem=f"Diagnóstico: {incidente.diagnostico}\nComando sugerido: {incidente.comando_remediacao}",
+                )
+            else:
+                logger.info(
+                    f"Notificação SNS não disparada (severidade='{severidade_normalizada}'; "
+                    "alerta crítico configurado apenas para ALTA/CRITICA)."
+                )
+        except Exception as exc:
+            logger.warning(f"Integração AWS/LocalStack não concluída nesta execução: {exc}")
 
     # 8. Aplica a remediação através do driver e sincroniza o status 'REMEDIADO' no DynamoDB.
     if driver.aplicar_remediacao(incidente.comando_remediacao):
