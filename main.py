@@ -24,10 +24,29 @@ def configurar_logging() -> None:
     )
 
 
+def _instancia_aws_manager(config: AppConfig) -> Optional[AWSManager]:
+    # Tenta criar o cliente AWS/LocalStack e garantir a tabela de incidentes para RAG/auditoria.
+    try:
+        aws = AWSManager(
+            endpoint_url=config.localstack_endpoint,
+            region_name=config.aws_region,
+        )
+        aws.criar_tabela_incidentes(config.dynamodb_table)
+        return aws
+    except Exception as exc:
+        logger = logging.getLogger("MainPipeline")
+        logger.warning(f"AWSManager indisponível nesta execução: {exc}")
+        return None
+
+
 def executar_pipeline(
     tipo_driver: str = "simulador",
     log_bruto_externo: Optional[str] = None,
     equipamento_externo: Optional[str] = None,
+    ip_equipamento: Optional[str] = None,
+    device_type: str = "cisco_ios",
+    secret_name: Optional[str] = None,
+    aws_manager: Optional[AWSManager] = None,
 ) -> IncidenteRede:
     # Cria o logger específico da orquestração principal.
     logger = logging.getLogger("MainPipeline")
@@ -36,13 +55,29 @@ def executar_pipeline(
     config = AppConfig()
     logger.info(f"Iniciando pipeline | Endpoint LocalStack: {config.localstack_endpoint}")
 
+    # Inicializa AWSManager se não tiver sido injetado externamente, para uso em RAG e/ou Secrets Manager.
+    aws: Optional[AWSManager] = aws_manager if aws_manager is not None else _instancia_aws_manager(config)
+
     # Define o nome inicial do equipamento priorizando o valor recebido por evento externo, se houver.
     nome_eq_inicial = (equipamento_externo or "router-borda-sp01").strip() or "router-borda-sp01"
-    # Instancia o driver de rede escolhido (por exemplo, "simulador" ou "netmiko") via Factory.
-    driver = NetworkDriverFactory.criar_driver(
-        tipo_driver,
-        nome_equipamento=nome_eq_inicial,
-    )
+
+    # Instancia o driver de rede escolhido via Factory, repassando parâmetros específicos do Netmiko.
+    driver_normalizado = tipo_driver.strip().lower()
+    if driver_normalizado == "netmiko":
+        segredo_resolvido = secret_name or os.getenv("ROUTER_SECRET_NAME")
+        driver = NetworkDriverFactory.criar_driver(
+            tipo_driver,
+            nome_equipamento=nome_eq_inicial,
+            ip=ip_equipamento,
+            device_type=device_type,
+            secret_name=segredo_resolvido,
+            aws_manager=aws,
+        )
+    else:
+        driver = NetworkDriverFactory.criar_driver(
+            tipo_driver,
+            nome_equipamento=nome_eq_inicial,
+        )
 
     # Usa o log vindo de gatilho externo (Webhook/Syslog) se informado; caso contrário, coleta do driver.
     if log_bruto_externo and log_bruto_externo.strip():
@@ -90,27 +125,21 @@ def executar_pipeline(
         status="COLETADO",
     )
 
-    # Inicializa variáveis da camada cloud/histórico antes de tentar conectar ao LocalStack/AWS.
-    aws = None
+    # Busca incidentes anteriores do mesmo equipamento para contexto RAG caso a conexão AWS esteja ativa.
     queue_url = None
     topic_arn = None
     historico_recente = None
 
-    try:
-        # Conecta ao AWSManager e busca incidentes anteriores do mesmo equipamento para contexto RAG.
-        aws = AWSManager(
-            endpoint_url=config.localstack_endpoint,
-            region_name=config.aws_region,
-        )
-        aws.criar_tabela_incidentes(config.dynamodb_table)
-        historico_recente = aws.buscar_historico_equipamento(
-            table_name=config.dynamodb_table,
-            equipamento=incidente.equipamento,
-            limite=5,
-        )
-    except Exception as exc:
-        # Se o DynamoDB/LocalStack não estiver acessível, segue a execução sem histórico prévio.
-        logger.warning(f"Consulta de histórico no DynamoDB não concluída nesta execução: {exc}")
+    if aws is not None:
+        try:
+            historico_recente = aws.buscar_historico_equipamento(
+                table_name=config.dynamodb_table,
+                equipamento=incidente.equipamento,
+                limite=5,
+            )
+        except Exception as exc:
+            # Se o DynamoDB/LocalStack não estiver acessível, segue a execução sem histórico prévio.
+            logger.warning(f"Consulta de histórico no DynamoDB não concluída nesta execução: {exc}")
 
     # Instancia o analisador de IA (Ollama) e executa o diagnóstico usando o log e o histórico RAG.
     analyzer = NetworkAIAnalyzer(
@@ -230,12 +259,21 @@ def executar_pipeline(
     return incidente
 
 
-def _processar_evento_gatilho(evento: Dict[str, Any], tipo_driver: str = "simulador") -> IncidenteRede:
+def _processar_evento_gatilho(
+    evento: Dict[str, Any],
+    tipo_driver: str = "simulador",
+    ip_equipamento: Optional[str] = None,
+    device_type: str = "cisco_ios",
+    secret_name: Optional[str] = None,
+) -> IncidenteRede:
     # Adapta o dicionário de evento recebido pelo gatilho para os parâmetros do executar_pipeline.
     return executar_pipeline(
         tipo_driver=tipo_driver,
         log_bruto_externo=evento.get("log_bruto"),
         equipamento_externo=evento.get("equipamento"),
+        ip_equipamento=evento.get("ip") or ip_equipamento,
+        device_type=evento.get("device_type") or device_type,
+        secret_name=evento.get("secret_name") or secret_name,
     )
 
 
@@ -246,6 +284,21 @@ def _parse_args() -> argparse.Namespace:
         "--driver",
         default="simulador",
         help="Tipo de driver de rede (padrão: simulador)",
+    )
+    parser.add_argument(
+        "--ip",
+        default=os.getenv("ROUTER_IP"),
+        help="Endereço IP de gerência do equipamento (usado no driver netmiko)",
+    )
+    parser.add_argument(
+        "--device-type",
+        default=os.getenv("ROUTER_DEVICE_TYPE", "cisco_ios"),
+        help="Tipo de dispositivo Netmiko (padrão: cisco_ios)",
+    )
+    parser.add_argument(
+        "--secret-name",
+        default=os.getenv("ROUTER_SECRET_NAME"),
+        help="Nome do segredo no AWS Secrets Manager (ou via ROUTER_SECRET_NAME)",
     )
     parser.add_argument(
         "--webhook",
@@ -280,15 +333,32 @@ if __name__ == "__main__":
     if args.webhook:
         servidor_http = WebhookEventServer(
             port=args.webhook_port,
-            callback_evento=lambda ev: _processar_evento_gatilho(ev, tipo_driver=args.driver),
+            callback_evento=lambda ev: _processar_evento_gatilho(
+                ev,
+                tipo_driver=args.driver,
+                ip_equipamento=args.ip,
+                device_type=args.device_type,
+                secret_name=args.secret_name,
+            ),
         )
         servidor_http.iniciar(bloqueante=True)
     elif args.syslog:
         servidor_syslog = SyslogUDPServer(
             port=args.syslog_port,
-            callback_evento=lambda ev: _processar_evento_gatilho(ev, tipo_driver=args.driver),
+            callback_evento=lambda ev: _processar_evento_gatilho(
+                ev,
+                tipo_driver=args.driver,
+                ip_equipamento=args.ip,
+                device_type=args.device_type,
+                secret_name=args.secret_name,
+            ),
         )
         servidor_syslog.iniciar(bloqueante=True)
     else:
-        incidente_final = executar_pipeline(tipo_driver=args.driver)
-        print(f"\nResumo final: {incidente_final}")
+        incidente_final = executar_pipeline(
+            tipo_driver=args.driver,
+            ip_equipamento=args.ip,
+            device_type=args.device_type,
+            secret_name=args.secret_name,
+        )
+        print(f"\nResumo final: {incidente_final}")[cite: 3]
