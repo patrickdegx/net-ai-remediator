@@ -42,7 +42,7 @@ services:
       # Nome do serviço LocalStack na rede interna do Docker Compose.
       - LOCALSTACK_HOST=localstack
       # URL do Ollama acessível a partir do container na rede do host (ajuste se o Ollama rodar em outro host).
-      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_URL=http://host.docker.internal:11434/api/generate
       # Modelo padrão utilizado pela camada de IA.
       - OLLAMA_MODEL=llama3
     # Aguarda o serviço localstack ser iniciado antes de subir a aplicação.
