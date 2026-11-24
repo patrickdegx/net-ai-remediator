@@ -1,6 +1,6 @@
 # Net-AI Remediator
 
-Ferramenta em Python (POO) de monitoramento, diagnóstico e remediação de incidentes de rede e nuvem, combinando drivers de rede, *parsing* com TextFSM, análise com IA local via Ollama e serviços AWS simulados via LocalStack.
+Ferramenta em Python de monitoramento, diagnóstico e remediação de incidentes de rede e nuvem, combinando drivers de rede, *parsing* com TextFSM, análise com IA local via Ollama e serviços AWS simulados via LocalStack.
 
 **Última atualização:** 24/11/2026
 
