@@ -13,12 +13,17 @@ from src.network.parser import NetworkParser
 # Tenta importar o Netmiko; se não estiver instalado no ambiente, evita quebrar o simulador.
 try:
     from netmiko import ConnectHandler, NetmikoAuthenticationException, NetmikoTimeoutException
+
     NETMIKO_DISPONIVEL = True
 except ImportError:
     NETMIKO_DISPONIVEL = False
 
 # Logger dedicado aos drivers de rede.
 logger = logging.getLogger("NetworkDriver")
+
+# Faixa padrão da rede de gerência: bloqueia IPs fora dessa rede a menos que o chamador
+# informe outro CIDR ou passe rede_gerencia_cidr=None para desativar a checagem.
+CIDR_GERENCIA_PADRAO = "10.255.255.0/24"
 
 
 class NetworkDriverInterface(ABC):
@@ -100,13 +105,14 @@ class NetmikoRouterDriver(NetworkDriverInterface):
         retry_delay: int = 2,
         secret_name: Optional[str] = None,
         aws_manager=None,
-        rede_gerencia_cidr: Optional[str] = "10.255.255.0/24",
+        rede_gerencia_cidr: Optional[str] = CIDR_GERENCIA_PADRAO,
     ):
         # Garante que a biblioteca netmiko esteja disponível antes de configurar conexão SSH.
         if not NETMIKO_DISPONIVEL:
             raise ImportError("A biblioteca 'netmiko' não está instalada. Execute: pip install netmiko")
 
         # 1. Valida isolamento de rede (rede de gerência dedicada / OOB) quando informado.
+        # Se rede_gerencia_cidr for None, essa verificação é ignorada.
         if rede_gerencia_cidr:
             try:
                 ip_obj = ipaddress.ip_address(ip)
@@ -249,7 +255,7 @@ class NetworkDriverFactory:
                 retry_delay=kwargs.get("retry_delay", 2),
                 secret_name=kwargs.get("secret_name"),
                 aws_manager=kwargs.get("aws_manager"),
-                rede_gerencia_cidr=kwargs.get("rede_gerencia_cidr", "10.255.255.0/24"),
+                rede_gerencia_cidr=kwargs.get("rede_gerencia_cidr", CIDR_GERENCIA_PADRAO),
             )
         else:
             raise ValueError(f"Tipo de driver desconhecido: '{tipo}'.")
