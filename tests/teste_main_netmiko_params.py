@@ -125,4 +125,4 @@ if __name__ == "__main__":
     testar_repasse_netmiko_explicito()
     testar_fallback_router_secret_name_e_gatilho()
     testar_modo_simulador_nao_recebe_extras_netmiko()
-    print("\nTodos os testes da Tarefa 3 passaram!")
+    print("\nTodos os testes da Tarefa 3 passaram!")git 

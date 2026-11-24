@@ -142,6 +142,10 @@ class WebhookEventServer:
             logger.info("Webhook encerrado.")
 
 
+class _ReusableUDPServer(socketserver.UDPServer):
+    allow_reuse_address = True
+
+
 class SyslogUDPServer:
     """Listener UDP Syslog leve para capturar mensagens de rede em tempo real."""
 
@@ -177,8 +181,7 @@ class SyslogUDPServer:
                 if callback:
                     callback(evento)
 
-        socketserver.UDPServer.allow_reuse_address = True
-        self._server = socketserver.UDPServer((self.host, self.port), SyslogHandler)
+        self._server = _ReusableUDPServer((self.host, self.port), SyslogHandler)
         logger.info(f"Listener Syslog UDP escutando em {self.host}:{self.port}")
 
         if bloqueante:
