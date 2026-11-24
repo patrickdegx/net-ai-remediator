@@ -49,10 +49,13 @@ class NetworkAIAnalyzer:
         ollama_url: str = "http://localhost:11434/api/generate",
     ):
         self.modelo = modelo
-        self.ollama_url = ollama_url
+        url_limpa = (ollama_url or "http://localhost:11434/api/generate").strip().rstrip("/")
+        if not url_limpa.endswith("/api/generate"):
+            url_limpa = f"{url_limpa}/api/generate"
+        self.ollama_url = url_limpa
         logger.info(
             f"AI Analyzer inicializado com o modelo '{self.modelo}' (Ollama), "
-            "suporte a RAG e validação de comandos ativa."
+            f"url='{self.ollama_url}', suporte a RAG e validação de comandos ativa."
         )
 
     def analisar_log_rede(

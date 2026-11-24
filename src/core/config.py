@@ -30,6 +30,15 @@ class AppConfig:
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3")
     ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
 
+    def __post_init__(self) -> None:
+        # Como a dataclass é frozen=True, usamos object.__setattr__ para normalizar
+        # a URL uma única vez após a inicialização, evitando duplicar /api/generate.
+        url_padrao = "http://localhost:11434/api/generate"
+        url_limpa = (self.ollama_url or url_padrao).strip().rstrip("/")
+        if not url_limpa.endswith("/api/generate"):
+            url_limpa = f"{url_limpa}/api/generate"
+        object.__setattr__(self, "ollama_url", url_limpa)
+
     # @property faz um método se comportar como um atributo somente leitura:
     # você acessa `config.localstack_endpoint` (sem parênteses), e ele monta a URL
     # dinamicamente com base no `localstack_host` atual.
@@ -37,3 +46,5 @@ class AppConfig:
     def localstack_endpoint(self) -> str:
         # f-string: permite inserir variáveis direto dentro da string usando {chaves}.
         return f"http://{self.localstack_host}:4566"
+
+
